@@ -200,7 +200,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 				return
 			}
 			if _, authorized := snap.Signers[eth.etherbase]; authorized {
-				if err := contracts.CreateTransactionSign(chainConfig, eth.txPool, eth.accountManager, block); err != nil {
+				if err := contracts.CreateTransactionSign(chainConfig, eth.txPool, eth.accountManager, block, chainDb); err != nil {
 					log.Error("Fail to create tx sign for imported block", "error", err)
 					return
 				}
@@ -232,7 +232,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 				if err != nil {
 					log.Error("Fail to calculate reward for signers", "error", err)
 				}
-				//// Get validator.
+				// Get validator.
 				validator, err := contract.NewTomoValidator(common.HexToAddress(common.MasternodeVotingSMC), client)
 				if err != nil {
 					log.Error("Fail get instance of Tomo Validator", "error", err)

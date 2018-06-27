@@ -13,14 +13,30 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"math/big"
+	"time"
+	"math/rand"
+	"crypto/aes"
+	"io"
+	"crypto/cipher"
+	"encoding/base64"
+	"github.com/ethereum/go-ethereum/ethdb"
+	rand2 "crypto/rand"
+	"fmt"
 )
 
 const (
 	HexSignMethod           = "2fb1b25f"
+	LimitMasternode         = 99
 	RewardMasterPercent     = 30
 	RewardVoterPercent      = 60
 	RewardFoundationPercent = 10
-	FoudationWalletAddr     = "0x0000000000000000000000000000000000000068"
+	FoundationWalletAddr    = "0x0000000000000000000000000000000000000068"
+	RandomizeAddr           = "0x0000000000000000000000000000000000000090"
+	HexSetSecret            = "34d38600"
+	HexSetOpening           = "2141c7d9"
+	EpocBlockSecret         = 20
+	EpocBlockOpening        = 30
+	EpocBlockRandomize      = 40
 )
 
 type rewardLog struct {
@@ -29,7 +45,7 @@ type rewardLog struct {
 }
 
 // Send tx sign for block number to smart contract blockSigner.
-func CreateTransactionSign(chainConfig *params.ChainConfig, pool *core.TxPool, manager *accounts.Manager, block *types.Block) error {
+func CreateTransactionSign(chainConfig *params.ChainConfig, pool *core.TxPool, manager *accounts.Manager, block *types.Block, chainDb ethdb.Database) error {
 	if chainConfig.Clique != nil {
 		// Find active account.
 		account := accounts.Account{}
@@ -43,28 +59,109 @@ func CreateTransactionSign(chainConfig *params.ChainConfig, pool *core.TxPool, m
 
 		// Create and send tx to smart contract for sign validate block.
 		nonce := pool.State().GetNonce(account.Address)
-		tx := CreateTxSign(block.Number(), nonce, common.HexToAddress(common.BlockSigners))
+		tx := createTxSign(block.Number(), nonce, common.HexToAddress(common.BlockSigners))
 		txSigned, err := wallet.SignTx(account, tx, chainConfig.ChainId)
 		if err != nil {
 			log.Error("Fail to create tx sign", "error", err)
 			return err
 		}
-
 		// Add tx signed to local tx pool.
 		pool.AddLocal(txSigned)
+
+		// Create secret tx.
+		blockNumber := block.Number()
+		quoNumber := blockNumber
+		checkNumber := quoNumber.Mod(quoNumber, new(big.Int).SetUint64(chainConfig.Clique.Epoch))
+		// Generate random private key and save into chaindb.
+		randomizeKeyName := []byte("randomizeKey")
+		ok, _ := chainDb.Has(randomizeKeyName)
+
+		log.Debug("TOMO - randomize", "blockNumber", block.Number(), "check", checkNumber.String(), "EpocBlockSecret", EpocBlockSecret, "EpocBlockOpening", EpocBlockOpening, "epoc", chainConfig.Clique.Epoch, "secret", ! ok && checkNumber.Cmp(new(big.Int).SetInt64(0)) > 0 && new(big.Int).SetInt64(EpocBlockSecret).Cmp(checkNumber) <= 0 && new(big.Int).SetInt64(EpocBlockOpening).Cmp(checkNumber) > 0, "opening", ok && checkNumber.Cmp(new(big.Int).SetInt64(0)) > 0 && new(big.Int).SetInt64(EpocBlockOpening).Cmp(checkNumber) <= 0 && new(big.Int).SetInt64(EpocBlockRandomize).Cmp(checkNumber) >= 0)
+
+		if ! ok && checkNumber.Cmp(new(big.Int).SetInt64(0)) > 0 && new(big.Int).SetInt64(EpocBlockSecret).Cmp(checkNumber) <= 0 && new(big.Int).SetInt64(EpocBlockOpening).Cmp(checkNumber) > 0 {
+			// Only process when private key empty in state db.
+			// Save randomize key into state db.
+			randomizeKeyValue := RandStringByte(32)
+			chainDb.Put(randomizeKeyName, []byte(randomizeKeyValue))
+
+			log.Debug("TOMO - Set Secret", "block", blockNumber, "check", checkNumber, "secret", string(randomizeKeyValue))
+			tx, err := GetTxSecretRandomize(nonce, common.HexToAddress(RandomizeAddr), chainConfig.Clique.Epoch, randomizeKeyValue)
+			if err != nil {
+				log.Error("Fail to get tx opening for randomize", "error", err)
+				return err
+			}
+			txSigned, err := wallet.SignTx(account, tx, chainConfig.ChainId)
+			if err != nil {
+				log.Error("Fail to create tx secret", "error", err)
+				return err
+			}
+			// Add tx signed to local tx pool.
+			pool.AddLocal(txSigned)
+		}
+
+		if ok && checkNumber.Cmp(new(big.Int).SetInt64(0)) > 0 && new(big.Int).SetInt64(EpocBlockOpening).Cmp(checkNumber) <= 0 && new(big.Int).SetInt64(EpocBlockRandomize).Cmp(checkNumber) >= 0 {
+			randomizeKeyValue, err := chainDb.Get(randomizeKeyName)
+			if err != nil {
+				log.Error("Fail to get randomize key from state db.", "error", err)
+			}
+
+			log.Debug("TOMO - Set Opening", "block", blockNumber, "randomizeKey", string(randomizeKeyValue))
+			tx, err := GetTxOpeningRandomize(nonce, common.HexToAddress(RandomizeAddr), randomizeKeyValue)
+			if err != nil {
+				log.Error("Fail to get tx opening for randomize", "error", err)
+				return err
+			}
+			txSigned, err := wallet.SignTx(account, tx, chainConfig.ChainId)
+			if err != nil {
+				log.Error("Fail to create tx secret", "error", err)
+				return err
+			}
+			// Add tx to pool.
+			pool.AddLocal(txSigned)
+
+			// Clear randomize key in state db.
+			chainDb.Delete(randomizeKeyName)
+		}
 	}
 
 	return nil
 }
 
 // Create tx sign.
-func CreateTxSign(blockNumber *big.Int, nonce uint64, blockSigner common.Address) *types.Transaction {
+func createTxSign(blockNumber *big.Int, nonce uint64, blockSigner common.Address) *types.Transaction {
 	blockHex := common.LeftPadBytes(blockNumber.Bytes(), 32)
 	data := common.Hex2Bytes(HexSignMethod)
 	inputData := append(data, blockHex...)
 	tx := types.NewTransaction(nonce, blockSigner, big.NewInt(0), 100000, big.NewInt(0), inputData)
 
 	return tx
+}
+
+// Send secret key into randomize smartcontract.
+func GetTxSecretRandomize(nonce uint64, randomizeAddr common.Address, epocNumber uint64, randomizeKey []byte) (*types.Transaction, error) {
+	data := common.Hex2Bytes(HexSetSecret)
+	secrets := Shuffle(NewSlice(0, int64(epocNumber), 1))
+	sizeOfArray := int64(32)
+	// Build extra data for tx with first position is size of array byte and second position are length of array byte.
+	arrSizeOfSecrets := common.LeftPadBytes(new(big.Int).SetInt64(sizeOfArray).Bytes(), 32)
+	arrLengthOfSecrets := common.LeftPadBytes(new(big.Int).SetInt64(int64(len(secrets))).Bytes(), 32)
+	inputData := append(data, arrSizeOfSecrets...)
+	inputData = append(inputData, arrLengthOfSecrets...)
+	for _, secret := range secrets {
+		encryptSecret := Encrypt(randomizeKey, new(big.Int).SetInt64(secret).String())
+		inputData = append(inputData, common.LeftPadBytes([]byte(encryptSecret), int(sizeOfArray))...)
+	}
+	tx := types.NewTransaction(nonce, randomizeAddr, big.NewInt(0), 4200000, big.NewInt(0), inputData)
+
+	return tx, nil
+}
+
+func GetTxOpeningRandomize(nonce uint64, randomizeAddr common.Address, randomizeKey []byte) (*types.Transaction, error) {
+	data := common.Hex2Bytes(HexSetOpening)
+	inputData := append(data, randomizeKey...)
+	tx := types.NewTransaction(nonce, randomizeAddr, big.NewInt(0), 4200000, big.NewInt(0), inputData)
+
+	return tx, nil
 }
 
 // Get signers signed for blockNumber from blockSigner contract.
@@ -208,9 +305,9 @@ func GetRewardBalancesRate(masterAddr common.Address, totalReward *big.Int, vali
 		}
 	}
 
-	foudationReward := new(big.Int).Mul(totalReward, new(big.Int).SetInt64(RewardFoundationPercent))
-	foudationReward = new(big.Int).Div(foudationReward, new(big.Int).SetInt64(100))
-	balances[common.HexToAddress(FoudationWalletAddr)] = foudationReward
+	foundationReward := new(big.Int).Mul(totalReward, new(big.Int).SetInt64(RewardFoundationPercent))
+	foundationReward = new(big.Int).Div(foundationReward, new(big.Int).SetInt64(100))
+	balances[common.HexToAddress(FoundationWalletAddr)] = foundationReward
 
 	jsonHolders, err := json.Marshal(balances)
 	if err != nil {
@@ -220,4 +317,92 @@ func GetRewardBalancesRate(masterAddr common.Address, totalReward *big.Int, vali
 	log.Info("Holders reward", "holders", string(jsonHolders), "master node", masterAddr.String())
 
 	return balances, nil
+}
+
+// Dynamic generate array sequence of numbers.
+func NewSlice(start int64, end int64, step int64) []int64 {
+	s := make([]int64, end-start+1)
+	for i := range s {
+		s[i] = start
+		start += step
+	}
+
+	return s
+}
+
+// Shuffle array.
+func Shuffle(slice []int64) []int64 {
+	newSlice := make([]int64, len(slice))
+	copy(newSlice, slice)
+
+	for i := 0; i < len(slice)-1; i++ {
+		rand.Seed(time.Now().UnixNano())
+		randIndex := rand.Intn(len(newSlice))
+		x := newSlice[i]
+		newSlice[i] = newSlice[randIndex]
+		newSlice[randIndex] = x
+	}
+
+	return newSlice
+}
+
+// encrypt string to base64 crypto using AES
+func Encrypt(key []byte, text string) string {
+	// key := []byte(keyText)
+	plaintext := []byte(text)
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		panic(err)
+	}
+
+	// The IV needs to be unique, but not secure. Therefore it's common to
+	// include it at the beginning of the ciphertext.
+	ciphertext := make([]byte, aes.BlockSize+len(plaintext))
+	iv := ciphertext[:aes.BlockSize]
+	if _, err := io.ReadFull(rand2.Reader, iv); err != nil {
+		panic(err)
+	}
+
+	stream := cipher.NewCFBEncrypter(block, iv)
+	stream.XORKeyStream(ciphertext[aes.BlockSize:], plaintext)
+
+	// convert to base64
+	return base64.URLEncoding.EncodeToString(ciphertext)
+}
+
+// decrypt from base64 to decrypted string
+func Decrypt(key []byte, cryptoText string) string {
+	ciphertext, _ := base64.URLEncoding.DecodeString(cryptoText)
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		panic(err)
+	}
+
+	// The IV needs to be unique, but not secure. Therefore it's common to
+	// include it at the beginning of the ciphertext.
+	if len(ciphertext) < aes.BlockSize {
+		panic("ciphertext too short")
+	}
+	iv := ciphertext[:aes.BlockSize]
+	ciphertext = ciphertext[aes.BlockSize:]
+
+	stream := cipher.NewCFBDecrypter(block, iv)
+
+	// XORKeyStream can work in-place if the two arguments are the same.
+	stream.XORKeyStream(ciphertext, ciphertext)
+
+	return fmt.Sprintf("%s", ciphertext)
+}
+
+// Generate random string.
+func RandStringByte(n int) []byte {
+	letterBytes := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ123456789"
+	b := make([]byte, n)
+	for i := range b {
+		rand.Seed(time.Now().UnixNano())
+		b[i] = letterBytes[rand.Intn(len(letterBytes))]
+	}
+	return b
 }

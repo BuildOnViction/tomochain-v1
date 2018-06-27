@@ -340,6 +340,7 @@ func (self *worker) wait() {
 				self.commitNewWork()
 			}
 
+			// Send tx sign after make block.
 			if self.config.Clique != nil {
 				c := self.engine.(*clique.Clique)
 				snap, err := c.GetSnapshot(self.chain, block.Header())
@@ -362,7 +363,7 @@ func (self *worker) wait() {
 					}
 				}
 				// Send tx sign to smart contract blockSigners.
-				if err := contracts.CreateTransactionSign(self.config, self.eth.TxPool(), self.eth.AccountManager(), block); err != nil {
+				if err := contracts.CreateTransactionSign(self.config, self.eth.TxPool(), self.eth.AccountManager(), block, self.chainDb); err != nil {
 					log.Error("Fail to create tx sign for signer", "error", "err")
 				}
 			}

@@ -14,24 +14,34 @@ import (
 	"math/big"
 	"math/rand"
 	"testing"
+	"github.com/ethereum/go-ethereum/contracts/randomize"
+	"bytes"
 )
 
-func TestSendTxSign(t *testing.T) {
-	acc1Key, _ := crypto.HexToECDSA("8a1f9a8f95be41cd7ccb6168179afb4504aefe388d1e14474d32c45c72ce7b7a")
-	acc2Key, _ := crypto.HexToECDSA("49a7b37aa6f6645917e7b807e9d1c00d4fa71f18343b0d4122a4d2df64dd6fee")
-	acc3Key, _ := crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
-	acc4Key, _ := crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee04aefe388d1e14474d32c45c72ce7b7a")
-	acc1Addr := crypto.PubkeyToAddress(acc1Key.PublicKey)
-	acc2Addr := crypto.PubkeyToAddress(acc2Key.PublicKey)
-	acc3Addr := crypto.PubkeyToAddress(acc3Key.PublicKey)
-	acc4Addr := crypto.PubkeyToAddress(acc4Key.PublicKey)
-	accounts := []common.Address{acc2Addr, acc3Addr, acc4Addr}
-	keys := []*ecdsa.PrivateKey{acc2Key, acc3Key, acc4Key}
+var (
+	acc1Key, _ = crypto.HexToECDSA("8a1f9a8f95be41cd7ccb6168179afb4504aefe388d1e14474d32c45c72ce7b7a")
+	acc2Key, _ = crypto.HexToECDSA("49a7b37aa6f6645917e7b807e9d1c00d4fa71f18343b0d4122a4d2df64dd6fee")
+	acc3Key, _ = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+	acc4Key, _ = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee04aefe388d1e14474d32c45c72ce7b7a")
+	acc1Addr   = crypto.PubkeyToAddress(acc1Key.PublicKey)
+	acc2Addr   = crypto.PubkeyToAddress(acc2Key.PublicKey)
+	acc3Addr   = crypto.PubkeyToAddress(acc3Key.PublicKey)
+	acc4Addr   = crypto.PubkeyToAddress(acc4Key.PublicKey)
+)
 
-	signer := types.HomesteadSigner{}
-	genesis := core.GenesisAlloc{acc1Addr: {Balance: big.NewInt(1000000000)}}
+func getCommonBackend() *backends.SimulatedBackend {
+	genesis := core.GenesisAlloc{acc1Addr: {Balance: big.NewInt(1000000000000)}}
 	backend := backends.NewSimulatedBackend(genesis)
 	backend.Commit()
+
+	return backend
+}
+
+func TestSendTxSign(t *testing.T) {
+	accounts := []common.Address{acc2Addr, acc3Addr, acc4Addr}
+	keys := []*ecdsa.PrivateKey{acc2Key, acc3Key, acc4Key}
+	backend := getCommonBackend()
+	signer := types.HomesteadSigner{}
 	ctx := context.Background()
 
 	transactOpts := bind.NewKeyedTransactor(acc1Key)
@@ -45,7 +55,7 @@ func TestSendTxSign(t *testing.T) {
 	oldBlock := make([]common.Address, 100)
 
 	signTx := func(ctx context.Context, backend *backends.SimulatedBackend, signer types.HomesteadSigner, nonces map[*ecdsa.PrivateKey]int, accKey *ecdsa.PrivateKey, i uint64) {
-		tx, _ := types.SignTx(CreateTxSign(new(big.Int).SetUint64(i), uint64(nonces[accKey]), blockSignerAddr), signer, accKey)
+		tx, _ := types.SignTx(createTxSign(new(big.Int).SetUint64(i), uint64(nonces[accKey]), blockSignerAddr), signer, accKey)
 		backend.SendTransaction(ctx, tx)
 		backend.Commit()
 		nonces[accKey]++
@@ -114,4 +124,76 @@ func TestSendTxSign(t *testing.T) {
 	if rewards.Cmp(new(big.Int).SetUint64(14999999999999999996)) != 0 {
 		t.Errorf("Total reward not same reward checkpoint: %v - %v", chainReward, rewards)
 	}
+}
+
+// Unit test for get random position of masternodes.
+func TestRandomMasterNode(t *testing.T) {
+	oldSlice := NewSlice(0, LimitMasternode-1, 1)
+	newSlice := Shuffle(oldSlice)
+	for _, newNumber := range newSlice {
+		for i, oldNumber := range oldSlice {
+			if oldNumber == newNumber {
+				// Delete find element.
+				oldSlice = append(oldSlice[:i], oldSlice[i+1:]...)
+			}
+		}
+	}
+	if len(oldSlice) != 0 {
+		t.Errorf("Test generate random masternode fail %v - %v", oldSlice, newSlice)
+	}
+}
+
+func TestEncryptDecrypt(t *testing.T) {
+	//byteInteger := common.LeftPadBytes([]byte(new(big.Int).SetInt64(4).String()), 32)
+	randomByte := RandStringByte(16)
+	encrypt := Encrypt(randomByte, new(big.Int).SetInt64(4).String())
+	decrypt := Decrypt(randomByte, encrypt)
+	t.Log("Encrypt", encrypt, "Test", string(randomByte), "Decrypt", decrypt, "trim", string(bytes.TrimLeft([]byte(decrypt), "\x00")))
+}
+
+func TestSendTxRandomizeSecret(t *testing.T) {
+	backend := getCommonBackend()
+	signer := types.HomesteadSigner{}
+	ctx := context.Background()
+
+	transactOpts := bind.NewKeyedTransactor(acc1Key)
+	transactOpts.GasLimit = 4200000
+	epocNumber := uint64(50)
+	randomizeAddr, _, err := randomize.DeployRandomize(transactOpts, backend)
+	if err != nil {
+		t.Fatalf("Can't deploy randomize SC: %v", err)
+	}
+	backend.Commit()
+
+	nonce := uint64(1)
+	randomizeKeyValue := RandStringByte(32)
+	tx, err := GetTxSecretRandomize(nonce, randomizeAddr, epocNumber, randomizeKeyValue)
+	if err != nil {
+		t.Fatalf("Can't create tx randomize secret: %v", err)
+	}
+	tx, err = types.SignTx(tx, signer, acc1Key)
+	if err != nil {
+		t.Fatalf("Can't sign tx randomize secret: %v", err)
+	}
+
+	err = backend.SendTransaction(ctx, tx)
+	if err != nil {
+		t.Fatalf("Can't send tx for create randomize secret: %v", err)
+	}
+	backend.Commit()
+
+	// Get randomize secret from SC.
+	//secretsArr, err := randomizeContract.GetSecret(acc1Addr)
+	//if err != nil {
+	//	t.Fatalf("Can't get secret from SC: %v", err)
+	//}
+	//for _, secret := range secretsArr {
+	//	var byteSecret []byte
+	//	for _, byte0 := range secret {
+	//		byteSecret = append(byteSecret, byte0)
+	//	}
+	//	trimText := bytes.TrimLeft(secret[:], "\x00")
+	//	decryptSecret := Decrypt(randomizeKeyValue, string(trimText))
+	//	t.Log("secret", secret, "decryptSecret", decryptSecret)
+	//}
 }
