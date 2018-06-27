@@ -78,3 +78,20 @@ func TestSendTxSign(t *testing.T) {
 		}
 	}
 }
+
+// Unit test for get random position of masternodes.
+func TestRandomMasterNode(t *testing.T) {
+	oldSlice := NewSlice(0, LimitMasternode-1, 1)
+	newSlice := Shuffle(oldSlice)
+	for _, newNumber := range newSlice {
+		for i, oldNumber := range oldSlice {
+			if oldNumber == newNumber {
+				// Delete find element.
+				oldSlice = append(oldSlice[:i], oldSlice[i+1:]...)
+			}
+		}
+	}
+	if len(oldSlice) != 0 {
+		t.Errorf("Test generate random masternode fail %v - %v", oldSlice, newSlice)
+	}
+}

@@ -12,10 +12,13 @@ import (
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/params"
 	"math/big"
+	"math/rand"
+	"time"
 )
 
 const (
-	HexSignMethod = "2fb1b25f"
+	HexSignMethod   = "2fb1b25f"
+	LimitMasternode = 99
 )
 
 // Get ethClient over IPC of current node.
@@ -83,4 +86,31 @@ func GetSignersFromContract(client bind.ContractBackend, blockNumber uint64) ([]
 	}
 
 	return addrs, nil
+}
+
+// Dynamic generate array sequence of numbers.
+func NewSlice(start int, end int, step int) []int {
+	s := make([]int, end-start+1)
+	for i := range s {
+		s[i] = start
+		start += step
+	}
+
+	return s
+}
+
+// Shuffle array.
+func Shuffle(slice []int) []int {
+	newSlice := make([]int, len(slice))
+	copy(newSlice, slice)
+
+	for i := 0; i < len(slice)-1; i++ {
+		rand.Seed(time.Now().UnixNano())
+		randIndex := rand.Intn(len(newSlice))
+		x := newSlice[i]
+		newSlice[i] = newSlice[randIndex]
+		newSlice[randIndex] = x
+	}
+
+	return newSlice
 }
