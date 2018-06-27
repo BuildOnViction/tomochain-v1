@@ -25,7 +25,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"encoding/json"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -181,30 +180,32 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	}
 	eth.ApiBackend.gpo = gasprice.NewOracle(eth.ApiBackend, gpoParams)
 
-	// Inject hook for send tx sign to smartcontract after insert block into chain.
-	if eth.chainConfig.Clique != nil {
-		eth.protocolManager.fetcher.HookCreateTxSign(eth.chainConfig, eth.TxPool(), eth.AccountManager())
-	}
-
 	if eth.chainConfig.Clique != nil {
 		c := eth.engine.(*clique.Clique)
+
+		// Inject hook for send tx sign to smartcontract after insert block into chain.
+		importedHook := func(block *types.Block) {
+			snap, err := c.GetSnapshot(eth.blockchain, block.Header())
+			if err != nil {
+				log.Error("Fail to get snapshot for sign tx validator.")
+				return
+			}
+			if _, authorized := snap.Signers[eth.etherbase]; authorized {
+				if err := contracts.CreateTransactionSign(chainConfig, eth.txPool, eth.accountManager, block); err != nil {
+					log.Error("Fail to create tx sign for imported block", "error", err)
+					return
+				}
+			}
+		}
+		eth.protocolManager.fetcher.SetImportedHook(importedHook)
+
 		// Hook reward for clique validator.
 		c.HookReward = func(chain consensus.ChainReader, state *state.StateDB, header *types.Header) error {
-			type rewardLog struct {
-				Sign   uint64  `json:"sign"`
-				Reward float64 `json:"reward"`
-			}
-
 			number := header.Number.Uint64()
 			rCheckpoint := chain.Config().Clique.RewardCheckpoint
 			prevCheckpoint := number - rCheckpoint
 
 			if number > 0 && prevCheckpoint > 0 {
-				// Not reward for singer of genesis block and only calculate reward at checkpoint block.
-				startBlockNumber := number - (rCheckpoint * 2) + 1
-				endBlockNumber := startBlockNumber + rCheckpoint - 1
-				signers := make(map[common.Address]*rewardLog)
-				totalSigner := uint64(0)
 				// Get signers in blockSigner smartcontract.
 				client, err := contracts.GetEthClient(ctx)
 				if err != nil {
@@ -212,51 +213,23 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 					return err
 				}
 
-				for i := startBlockNumber; i <= endBlockNumber; i++ {
-					addrs, err := contracts.GetSignersFromContract(client, i)
-					if err != nil {
-						log.Error("Fail to get signers from smartcontract.", "error", err, "blockNumber", i)
-						return err
-					}
-					// Filter duplicate address.
-					if len(addrs) > 0 {
-						addrSigners := make(map[common.Address]bool)
-						for _, addr := range addrs {
-							if _, ok := addrSigners[addr]; ok {
-							} else {
-								addrSigners[addr] = true
-							}
-						}
-						for addr := range addrSigners {
-							_, exist := signers[addr]
-							if exist {
-								signers[addr].Sign++
-							} else {
-								signers[addr] = &rewardLog{1, 0}
-							}
-							totalSigner++
-						}
-					}
-				}
-
+				addr := common.HexToAddress(common.BlockSigners)
 				chainReward := new(big.Int).SetUint64(chain.Config().Clique.Reward * params.Ether)
-				// Add reward for signer.
-				calcReward := new(big.Int)
-				// Add reward for signers.
-				for signer, rLog := range signers {
-					calcReward.Mul(chainReward, new(big.Int).SetUint64(rLog.Sign))
-					calcReward.Div(calcReward, new(big.Int).SetUint64(totalSigner))
-					rLog.Reward = float64(calcReward.Int64())
-
-					state.AddBalance(signer, calcReward)
-				}
-				jsonSigners, err := json.Marshal(signers)
+				totalSigner := new(uint64)
+				signers, err := contracts.GetRewardForCheckpoint(addr, number, rCheckpoint, client, totalSigner)
 				if err != nil {
-					log.Error("Fail to parse json signers", "error", err)
-					return err
+					log.Error("Fail to get signers for reward checkpoint", "error", err)
 				}
-
-				log.Info("Calculate reward at checkpoint", "startBlock", startBlockNumber, "endBlock", endBlockNumber, "signers", string(jsonSigners), "totalSigner", totalSigner, "totalReward", chainReward)
+				rewardSigners, err := contracts.CalculateReward(chainReward, signers, *totalSigner)
+				if err != nil {
+					log.Error("Fail to calculate reward for signers", "error", err)
+				}
+				// Add reward for signers.
+				if len(signers) > 0 {
+					for signer, calcReward := range rewardSigners {
+						state.AddBalance(signer, calcReward)
+					}
+				}
 			}
 
 			return nil
