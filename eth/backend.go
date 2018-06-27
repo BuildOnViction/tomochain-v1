@@ -203,13 +203,16 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		c.HookReward = func(chain consensus.ChainReader, state *state.StateDB, header *types.Header) error {
 			number := header.Number.Uint64()
 			rCheckpoint := chain.Config().Clique.RewardCheckpoint
-			if number > 0 && number-rCheckpoint > 0 {
+			prevCheckpoint := number - rCheckpoint
+
+			if number > 0 && prevCheckpoint > 0 {
 				// Get signers in blockSigner smartcontract.
 				client, err := contracts.GetEthClient(ctx)
 				if err != nil {
 					log.Error("Fail to connect IPC from blockSigner", "error", err)
 					return err
 				}
+
 				addr := common.HexToAddress(common.BlockSigners)
 				chainReward := new(big.Int).SetUint64(chain.Config().Clique.Reward * params.Ether)
 				totalSigner := new(uint64)
@@ -390,7 +393,7 @@ func (self *Ethereum) SetEtherbase(etherbase common.Address) {
 }
 
 // ValidateMiner checks if node's address is in set of validators
-func (s *Ethereum) ValidateMiner() (bool, error) {
+func (s *Ethereum) ValidateStaker() (bool, error) {
 	eb, err := s.Etherbase()
 	if err != nil {
 		return false, err
@@ -412,7 +415,7 @@ func (s *Ethereum) ValidateMiner() (bool, error) {
 	return true, nil
 }
 
-func (s *Ethereum) StartMining(local bool) error {
+func (s *Ethereum) StartStaking(local bool) error {
 	eb, err := s.Etherbase()
 	if err != nil {
 		log.Error("Cannot start mining without etherbase", "err", err)
