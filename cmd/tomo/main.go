@@ -279,7 +279,7 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 		}
 	}()
 	// Start auxiliary services if enabled
-	if ctx.GlobalBool(utils.MiningEnabledFlag.Name) || ctx.GlobalBool(utils.DeveloperFlag.Name) {
+	if ctx.GlobalBool(utils.StakingEnabledFlag.Name) || ctx.GlobalBool(utils.DeveloperFlag.Name) {
 		// Mining only makes sense if a full Ethereum node is running
 		if ctx.GlobalBool(utils.LightModeFlag.Name) || ctx.GlobalString(utils.SyncModeFlag.Name) == "light" {
 			utils.Fatalf("Light clients do not support mining")
@@ -295,9 +295,9 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 				utils.Fatalf("Can't verify validator permission: %v", err)
 			}
 			if ok {
-				log.Info("Validator found. Enabling mining mode...")
+				log.Info("Validator found. Enabling staking mode...")
 				// Use a reduced number of threads if requested
-				if threads := ctx.GlobalInt(utils.MinerThreadsFlag.Name); threads > 0 {
+				if threads := ctx.GlobalInt(utils.StakerThreadsFlag.Name); threads > 0 {
 					type threaded interface {
 						SetThreads(threads int)
 					}
@@ -311,7 +311,7 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 					utils.Fatalf("Failed to start staking: %v", err)
 				}
 				started = true
-				log.Info("Enabled mining node!!!")
+				log.Info("Enabled staking node!!!")
 			}
 			defer close(core.Checkpoint)
 
@@ -324,14 +324,14 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 				if !ok {
 					log.Info("Only validator can mine blocks. Cancelling mining on this node...")
 					if started {
-						ethereum.StopMining()
+						ethereum.StopStaking()
 						started = false
 					}
 					log.Info("Cancelled mining mode!!!")
 				} else if !started {
 					log.Info("Validator found. Enabling mining mode...")
 					// Use a reduced number of threads if requested
-					if threads := ctx.GlobalInt(utils.MinerThreadsFlag.Name); threads > 0 {
+					if threads := ctx.GlobalInt(utils.StakerThreadsFlag.Name); threads > 0 {
 						type threaded interface {
 							SetThreads(threads int)
 						}
