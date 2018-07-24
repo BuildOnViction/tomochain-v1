@@ -80,13 +80,13 @@ type account struct {
 	Passwords []string `toml:"passwords"`
 }
 type tomoConfig struct {
-	Eth        eth.Config       `toml:"eth"`
-	Shh        whisper.Config   `toml:"ssh"`
-	Node       node.Config      `toml:"node"`
-	Ethstats   ethstatsConfig   `toml:"ethstats"`
-	Dashboard  dashboard.Config `toml:"dashboard"`
-	Account    account          `toml:"account"`
-	MineEnable bool             `toml:"mine"`
+	Eth         eth.Config       `toml:"eth"`
+	Shh         whisper.Config   `toml:"ssh"`
+	Node        node.Config      `toml:"node"`
+	Ethstats    ethstatsConfig   `toml:"ethstats"`
+	Dashboard   dashboard.Config `toml:"dashboard"`
+	Account     account          `toml:"account"`
+	StakeEnable bool             `toml:"stake"`
 }
 
 func loadConfig(file string, cfg *tomoConfig) error {
@@ -134,8 +134,7 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, tomoConfig) {
 		if trimmed := strings.TrimSpace(env); trimmed != "" {
 			value := os.Getenv(trimmed)
 			for _, info := range strings.Split(value, ",") {
-				trimmed2 := strings.TrimSpace(info)
-				if (trimmed2 != "") {
+				if trimmed2 := strings.TrimSpace(info); trimmed2 != "" {
 					passwords = append(passwords, trimmed2)
 				}
 			}
