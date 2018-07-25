@@ -180,7 +180,7 @@ var AppHelpFlagGroups = []flagGroup{
 		},
 	},
 	{
-		Name: "MINER",
+		Name: "STAKER",
 		Flags: []cli.Flag{
 			utils.StakingEnabledFlag,
 			utils.StakerThreadsFlag,

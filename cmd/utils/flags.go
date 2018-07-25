@@ -312,11 +312,11 @@ var (
 	}
 	// Miner settings
 	StakingEnabledFlag = cli.BoolFlag{
-		Name:  "mine",
+		Name:  "stake",
 		Usage: "Enable staking",
 	}
 	StakerThreadsFlag = cli.IntFlag{
-		Name:  "minerthreads",
+		Name:  "stakerthreads",
 		Usage: "Number of CPU threads to use for staking",
 		Value: runtime.NumCPU(),
 	}
