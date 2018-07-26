@@ -94,11 +94,11 @@ type Config struct {
 	TrieCache          int
 	TrieTimeout        time.Duration
 
-	// Mining-related options
-	Etherbase    common.Address `toml:",omitempty"`
-	MinerThreads int            `toml:",omitempty"`
-	ExtraData    []byte         `toml:",omitempty"`
-	GasPrice     *big.Int		`toml:"GasPrice"`
+	// Staking-related options
+	Etherbase     common.Address `toml:",omitempty"`
+	StakerThreads int            `toml:",omitempty"`
+	ExtraData     []byte         `toml:",omitempty"`
+	GasPrice      *big.Int       `toml:"GasPrice"`
 
 	// Ethash options
 	Ethash ethash.Config

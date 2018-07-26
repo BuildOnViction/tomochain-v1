@@ -23,7 +23,7 @@ var Modules = map[string]string{
 	"clique":     Clique_JS,
 	"debug":      Debug_JS,
 	"eth":        Eth_JS,
-	"miner":      Miner_JS,
+	"masternode": Staker_JS,
 	"net":        Net_JS,
 	"personal":   Personal_JS,
 	"rpc":        RPC_JS,
@@ -449,40 +449,40 @@ web3._extend({
 });
 `
 
-const Miner_JS = `
+const Staker_JS = `
 web3._extend({
-	property: 'miner',
+	property: 'masternode',
 	methods: [
 		new web3._extend.Method({
 			name: 'start',
-			call: 'miner_start',
+			call: 'staker_start',
 			params: 1,
 			inputFormatter: [null]
 		}),
 		new web3._extend.Method({
 			name: 'stop',
-			call: 'miner_stop'
+			call: 'staker_stop'
 		}),
 		new web3._extend.Method({
 			name: 'setEtherbase',
-			call: 'miner_setEtherbase',
+			call: 'staker_setEtherbase',
 			params: 1,
 			inputFormatter: [web3._extend.formatters.inputAddressFormatter]
 		}),
 		new web3._extend.Method({
 			name: 'setExtra',
-			call: 'miner_setExtra',
+			call: 'staker_setExtra',
 			params: 1
 		}),
 		new web3._extend.Method({
 			name: 'setGasPrice',
-			call: 'miner_setGasPrice',
+			call: 'staker_setGasPrice',
 			params: 1,
 			inputFormatter: [web3._extend.utils.fromDecimal]
 		}),
 		new web3._extend.Method({
 			name: 'getHashrate',
-			call: 'miner_getHashrate'
+			call: 'staker_getHashrate'
 		}),
 	],
 	properties: []

@@ -205,7 +205,7 @@ type Clique struct {
 	db     ethdb.Database       // Database to store and retrieve snapshot checkpoints
 
 	recents    *lru.ARCCache // Snapshots for recent block to speed up reorgs
-	signatures *lru.ARCCache // Signatures of recent blocks to speed up mining
+	signatures *lru.ARCCache // Signatures of recent blocks to speed up staking
 
 	proposals map[common.Address]bool // Current list of proposals we are pushing
 

@@ -226,7 +226,7 @@ func tomo(ctx *cli.Context) error {
 
 // startNode boots up the system node and all registered protocols, after which
 // it unlocks any requested accounts, and starts the RPC/IPC interfaces and the
-// miner.
+// masternode.
 func startNode(ctx *cli.Context, stack *node.Node,cfg tomoConfig) {
 	// Start up the node itself
 	utils.StartNode(stack)
@@ -290,7 +290,7 @@ func startNode(ctx *cli.Context, stack *node.Node,cfg tomoConfig) {
 	}()
 	// Start auxiliary services if enabled
 	if cfg.StakeEnable || ctx.GlobalBool(utils.DeveloperFlag.Name) {
-		// Mining only makes sense if a full Ethereum node is running
+		// Staking only makes sense if a full Ethereum node is running
 		if ctx.GlobalBool(utils.LightModeFlag.Name) || ctx.GlobalString(utils.SyncModeFlag.Name) == "light" {
 			utils.Fatalf("Light clients do not support staking")
 		}
@@ -315,7 +315,7 @@ func startNode(ctx *cli.Context, stack *node.Node,cfg tomoConfig) {
 						th.SetThreads(threads)
 					}
 				}
-				// Set the gas price to the limits from the CLI and start mining
+				// Set the gas price to the limits from the CLI and start staking
 				ethereum.TxPool().SetGasPrice(cfg.Eth.GasPrice)
 				if err := ethereum.StartStaking(true); err != nil {
 					utils.Fatalf("Failed to start staking: %v", err)
@@ -338,7 +338,7 @@ func startNode(ctx *cli.Context, stack *node.Node,cfg tomoConfig) {
 							log.Info("Only masternode can propose and verify blocks. Cancelling staking on this node...")
 							ethereum.StopStaking()
 							started = false
-							log.Info("Cancelled mining mode!!!")
+							log.Info("Cancelled staking mode!!!")
 						}
 					} else if !started {
 						log.Info("Masternode found. Enabling staking mode...")
@@ -351,7 +351,7 @@ func startNode(ctx *cli.Context, stack *node.Node,cfg tomoConfig) {
 								th.SetThreads(threads)
 							}
 						}
-						// Set the gas price to the limits from the CLI and start mining
+						// Set the gas price to the limits from the CLI and start staking
 						ethereum.TxPool().SetGasPrice(cfg.Eth.GasPrice)
 						if err := ethereum.StartStaking(true); err != nil {
 							utils.Fatalf("Failed to start staking: %v", err)

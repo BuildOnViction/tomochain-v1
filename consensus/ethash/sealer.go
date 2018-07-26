@@ -62,21 +62,21 @@ func (ethash *Ethash) Seal(chain consensus.ChainReader, block *types.Block, stop
 		threads = runtime.NumCPU()
 	}
 	if threads < 0 {
-		threads = 0 // Allows disabling local mining without extra logic around local/remote
+		threads = 0 // Allows disabling local staking without extra logic around local/remote
 	}
 	var pend sync.WaitGroup
 	for i := 0; i < threads; i++ {
 		pend.Add(1)
 		go func(id int, nonce uint64) {
 			defer pend.Done()
-			ethash.mine(block, id, nonce, abort, found)
+			ethash.stake(block, id, nonce, abort, found)
 		}(i, uint64(ethash.rand.Int63()))
 	}
 	// Wait until sealing is terminated or a nonce is found
 	var result *types.Block
 	select {
 	case <-stop:
-		// Outside abort, stop all miner threads
+		// Outside abort, stop all masternode threads
 		close(abort)
 	case result = <-found:
 		// One of the threads found a block, abort all others
@@ -87,14 +87,14 @@ func (ethash *Ethash) Seal(chain consensus.ChainReader, block *types.Block, stop
 		pend.Wait()
 		return ethash.Seal(chain, block, stop)
 	}
-	// Wait for all miners to terminate and return the block
+	// Wait for all stakers to terminate and return the block
 	pend.Wait()
 	return result, nil
 }
 
-// mine is the actual proof-of-work miner that searches for a nonce starting from
+// stake is the actual proof-of-work masternode that searches for a nonce starting from
 // seed that results in correct final block difficulty.
-func (ethash *Ethash) mine(block *types.Block, id int, seed uint64, abort chan struct{}, found chan *types.Block) {
+func (ethash *Ethash) stake(block *types.Block, id int, seed uint64, abort chan struct{}, found chan *types.Block) {
 	// Extract some data from the header
 	var (
 		header  = block.Header()
@@ -108,13 +108,13 @@ func (ethash *Ethash) mine(block *types.Block, id int, seed uint64, abort chan s
 		attempts = int64(0)
 		nonce    = seed
 	)
-	logger := log.New("miner", id)
+	logger := log.New("masternode", id)
 	logger.Trace("Started ethash search for new nonces", "seed", seed)
 search:
 	for {
 		select {
 		case <-abort:
-			// Mining terminated, update stats and abort
+			// Staking terminated, update stats and abort
 			logger.Trace("Ethash nonce search aborted", "attempts", nonce-seed)
 			ethash.hashrate.Mark(attempts)
 			break search

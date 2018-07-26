@@ -85,7 +85,7 @@ type Engine interface {
 	Finalize(chain ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction,
 		uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error)
 
-	// Seal generates a new block for the given input block with the local miner's
+	// Seal generates a new block for the given input block with the local masternode's
 	// seal place on top.
 	Seal(chain ChainReader, block *types.Block, stop <-chan struct{}) (*types.Block, error)
 
@@ -101,6 +101,6 @@ type Engine interface {
 type PoW interface {
 	Engine
 
-	// Hashrate returns the current mining hashrate of a PoW consensus engine.
+	// Hashrate returns the current staking hashrate of a PoW consensus engine.
 	Hashrate() float64
 }

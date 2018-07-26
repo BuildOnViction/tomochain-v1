@@ -47,7 +47,7 @@ Regular users do not need to execute it.
 	makedagCommand = cli.Command{
 		Action:    utils.MigrateFlags(makedag),
 		Name:      "makedag",
-		Usage:     "Generate ethash mining DAG (for testing)",
+		Usage:     "Generate ethash staking DAG (for testing)",
 		ArgsUsage: "<blockNum> <outputDir>",
 		Category:  "MISCELLANEOUS COMMANDS",
 		Description: `
@@ -91,7 +91,7 @@ func makecache(ctx *cli.Context) error {
 	return nil
 }
 
-// makedag generates an ethash mining DAG into the provided folder.
+// makedag generates an ethash staking DAG into the provided folder.
 func makedag(ctx *cli.Context) error {
 	args := ctx.Args()
 	if len(args) != 2 {

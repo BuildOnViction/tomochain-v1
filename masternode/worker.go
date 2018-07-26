@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
-package miner
+package masternode
 
 import (
 	"bytes"
@@ -41,8 +41,8 @@ import (
 )
 
 const (
-	resultQueueSize  = 10
-	miningLogAtDepth = 5
+	resultQueueSize   = 10
+	stakingLogAtDepth = 5
 
 	// txChanSize is the size of channel listening to TxPreEvent.
 	// The number is referenced from the size of tx pool.
@@ -122,11 +122,11 @@ type worker struct {
 	uncleMu        sync.Mutex
 	possibleUncles map[common.Hash]*types.Block
 
-	unconfirmed *unconfirmedBlocks // set of locally mined blocks pending canonicalness confirmations
+	unconfirmed *unconfirmedBlocks // set of locally staked blocks pending canonicalness confirmations
 
 	// atomic status counters
-	mining int32
-	atWork int32
+	staking int32
+	atWork  int32
 }
 
 func newWorker(config *params.ChainConfig, engine consensus.Engine, coinbase common.Address, eth Backend, mux *event.TypeMux) *worker {
@@ -145,7 +145,7 @@ func newWorker(config *params.ChainConfig, engine consensus.Engine, coinbase com
 		possibleUncles: make(map[common.Hash]*types.Block),
 		coinbase:       coinbase,
 		agents:         make(map[Agent]struct{}),
-		unconfirmed:    newUnconfirmedBlocks(eth.BlockChain(), miningLogAtDepth),
+		unconfirmed:    newUnconfirmedBlocks(eth.BlockChain(), stakingLogAtDepth),
 	}
 	// Subscribe TxPreEvent for tx pool
 	worker.txSub = eth.TxPool().SubscribeTxPreEvent(worker.txCh)
@@ -176,7 +176,7 @@ func (self *worker) pending() (*types.Block, *state.StateDB) {
 	self.currentMu.Lock()
 	defer self.currentMu.Unlock()
 
-	if atomic.LoadInt32(&self.mining) == 0 {
+	if atomic.LoadInt32(&self.staking) == 0 {
 		return types.NewBlock(
 			self.current.header,
 			self.current.txs,
@@ -191,7 +191,7 @@ func (self *worker) pendingBlock() *types.Block {
 	self.currentMu.Lock()
 	defer self.currentMu.Unlock()
 
-	if atomic.LoadInt32(&self.mining) == 0 {
+	if atomic.LoadInt32(&self.staking) == 0 {
 		return types.NewBlock(
 			self.current.header,
 			self.current.txs,
@@ -206,7 +206,7 @@ func (self *worker) start() {
 	self.mu.Lock()
 	defer self.mu.Unlock()
 
-	atomic.StoreInt32(&self.mining, 1)
+	atomic.StoreInt32(&self.staking, 1)
 
 	// spin up agents
 	for agent := range self.agents {
@@ -219,12 +219,12 @@ func (self *worker) stop() {
 
 	self.mu.Lock()
 	defer self.mu.Unlock()
-	if atomic.LoadInt32(&self.mining) == 1 {
+	if atomic.LoadInt32(&self.staking) == 1 {
 		for agent := range self.agents {
 			agent.Stop()
 		}
 	}
-	atomic.StoreInt32(&self.mining, 0)
+	atomic.StoreInt32(&self.staking, 0)
 	atomic.StoreInt32(&self.atWork, 0)
 }
 
@@ -262,8 +262,8 @@ func (self *worker) update() {
 
 			// Handle TxPreEvent
 		case ev := <-self.txCh:
-			// Apply transaction to the pending state if we're not mining
-			if atomic.LoadInt32(&self.mining) == 0 {
+			// Apply transaction to the pending state if we're not staking
+			if atomic.LoadInt32(&self.staking) == 0 {
 				self.currentMu.Lock()
 				acc, _ := types.Sender(self.current.signer, ev.Tx)
 				txs := map[common.Address]types.Transactions{acc: {ev.Tx}}
@@ -272,7 +272,7 @@ func (self *worker) update() {
 				self.current.commitTransactions(self.mux, txset, self.chain, self.coinbase)
 				self.currentMu.Unlock()
 			} else {
-				// If we're mining, but nothing is being processed, wake on new transactions
+				// If we're staking, but nothing is being processed, wake on new transactions
 				if self.config.Clique != nil && self.config.Clique.Period == 0 {
 					self.commitNewWork()
 				}
@@ -322,7 +322,7 @@ func (self *worker) wait() {
 				mustCommitNewWork = false
 			}
 			// Broadcast the block and announce chain insertion event
-			self.mux.Post(core.NewMinedBlockEvent{Block: block})
+			self.mux.Post(core.NewStakedBlockEvent{Block: block})
 			var (
 				events []interface{}
 				logs   = work.state.Logs()
@@ -370,9 +370,9 @@ func (self *worker) wait() {
 	}
 }
 
-// push sends a new work task to currently live miner agents.
+// push sends a new work task to currently live masternode agents.
 func (self *worker) push(work *Work) {
-	if atomic.LoadInt32(&self.mining) != 1 {
+	if atomic.LoadInt32(&self.staking) != 1 {
 		return
 	}
 	for agent := range self.agents {
@@ -426,8 +426,8 @@ func (self *worker) commitNewWork() {
 	tstart := time.Now()
 	parent := self.chain.CurrentBlock()
 
-	// Only try to commit new work if we are mining
-	if atomic.LoadInt32(&self.mining) == 1 {
+	// Only try to commit new work if we are staking
+	if atomic.LoadInt32(&self.staking) == 1 {
 		// check if we are right after parent's coinbase in the list
 		// only go with Clique
 		if self.config.Clique != nil {
@@ -458,7 +458,7 @@ func (self *worker) commitNewWork() {
 	// this will ensure we're not going off too far in the future
 	if now := time.Now().Unix(); tstamp > now+1 {
 		wait := time.Duration(tstamp-now) * time.Second
-		log.Info("Mining too far in the future", "wait", common.PrettyDuration(wait))
+		log.Info("Staking too far in the future", "wait", common.PrettyDuration(wait))
 		time.Sleep(wait)
 	}
 
@@ -470,12 +470,12 @@ func (self *worker) commitNewWork() {
 		Extra:      self.extra,
 		Time:       big.NewInt(tstamp),
 	}
-	// Only set the coinbase if we are mining (avoid spurious block rewards)
-	if atomic.LoadInt32(&self.mining) == 1 {
+	// Only set the coinbase if we are staking (avoid spurious block rewards)
+	if atomic.LoadInt32(&self.staking) == 1 {
 		header.Coinbase = self.coinbase
 	}
 	if err := self.engine.Prepare(self.chain, header); err != nil {
-		log.Error("Failed to prepare header for mining", "err", err)
+		log.Error("Failed to prepare header for staking", "err", err)
 		return
 	}
 	// If we are care about TheDAO hard-fork check whether to override the extra-data or not
@@ -487,14 +487,14 @@ func (self *worker) commitNewWork() {
 			if self.config.DAOForkSupport {
 				header.Extra = common.CopyBytes(params.DAOForkBlockExtra)
 			} else if bytes.Equal(header.Extra, params.DAOForkBlockExtra) {
-				header.Extra = []byte{} // If miner opposes, don't let it use the reserved extra-data
+				header.Extra = []byte{} // If masternode opposes, don't let it use the reserved extra-data
 			}
 		}
 	}
-	// Could potentially happen if starting to mine in an odd state.
+	// Could potentially happen if starting to stake in an odd state.
 	err := self.makeCurrent(parent, header)
 	if err != nil {
-		log.Error("Failed to create mining context", "err", err)
+		log.Error("Failed to create staking context", "err", err)
 		return
 	}
 	// Create the current work task and check any fork transitions needed
@@ -537,9 +537,9 @@ func (self *worker) commitNewWork() {
 		log.Error("Failed to finalize block for sealing", "err", err)
 		return
 	}
-	// We only care about logging if we're actually mining.
-	if atomic.LoadInt32(&self.mining) == 1 {
-		log.Info("Commit new mining work", "number", work.Block.Number(), "txs", work.tcount, "uncles", len(uncles), "elapsed", common.PrettyDuration(time.Since(tstart)))
+	// We only care about logging if we're actually staking.
+	if atomic.LoadInt32(&self.staking) == 1 {
+		log.Info("Commit new staking work", "number", work.Block.Number(), "txs", work.tcount, "uncles", len(uncles), "elapsed", common.PrettyDuration(time.Since(tstart)))
 		self.unconfirmed.Shift(work.Block.NumberU64() - 1)
 	}
 	if work.config.Clique != nil {
@@ -610,12 +610,12 @@ func (env *Work) commitTransactions(mux *event.TypeMux, txs *types.TransactionsB
 			txs.Pop()
 
 		case core.ErrNonceTooLow:
-			// New head notification data race between the transaction pool and miner, shift
+			// New head notification data race between the transaction pool and masternode, shift
 			log.Trace("Skipping transaction with low nonce", "sender", from, "nonce", tx.Nonce())
 			txs.Shift()
 
 		case core.ErrNonceTooHigh:
-			// Reorg notification data race between the transaction pool and miner, skip account =
+			// Reorg notification data race between the transaction pool and masternode, skip account =
 			log.Trace("Skipping account with hight nonce", "sender", from, "nonce", tx.Nonce())
 			txs.Pop()
 
@@ -634,8 +634,8 @@ func (env *Work) commitTransactions(mux *event.TypeMux, txs *types.TransactionsB
 	}
 
 	if len(coalescedLogs) > 0 || env.tcount > 0 {
-		// make a copy, the state caches the logs and these logs get "upgraded" from pending to mined
-		// logs by filling in the block hash when the block was mined by the local miner. This can
+		// make a copy, the state caches the logs and these logs get "upgraded" from pending to staked
+		// logs by filling in the block hash when the block was staked by the local masternode. This can
 		// cause a race condition if a log was "upgraded" before the PendingLogsEvent is processed.
 		cpy := make([]*types.Log, len(coalescedLogs))
 		for i, l := range coalescedLogs {

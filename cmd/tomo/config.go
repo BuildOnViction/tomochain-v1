@@ -81,22 +81,21 @@ type account struct {
 }
 
 type Bootnodes struct {
-	Mainnet   	[]string `toml:"main"`
-	Testnet 	[]string `toml:"test"`
-	Rinkeby 	[]string `toml:"rinkeby"`
+	Mainnet     []string `toml:"main"`
+	Testnet     []string `toml:"test"`
+	Rinkeby     []string `toml:"rinkeby"`
 	DiscoveryV5 []string `toml:"discoveryv5"`
 }
 
-
 type tomoConfig struct {
-	Eth         eth.Config      	`toml:"eth"`
-	Shh         whisper.Config   	`toml:"ssh"`
-	Node        node.Config      	`toml:"node"`
-	Ethstats    ethstatsConfig   	`toml:"ethstats"`
-	Dashboard   dashboard.Config 	`toml:"dashboard"`
-	Account     account          	`toml:"account"`
-	StakeEnable bool             	`toml:"stake"`
-	Bootnodes	Bootnodes 			`toml:"bootnodes"`
+	Eth         eth.Config       `toml:"eth"`
+	Shh         whisper.Config   `toml:"ssh"`
+	Node        node.Config      `toml:"node"`
+	Ethstats    ethstatsConfig   `toml:"ethstats"`
+	Dashboard   dashboard.Config `toml:"dashboard"`
+	Account     account          `toml:"account"`
+	StakeEnable bool             `toml:"stake"`
+	Bootnodes   Bootnodes        `toml:"bootnodes"`
 }
 
 func loadConfig(file string, cfg *tomoConfig) error {
@@ -138,17 +137,17 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, tomoConfig) {
 		}
 	}
 	//Apply Bootnodes
-	applyValues(cfg.Bootnodes.Mainnet,&params.MainnetBootnodes)
-	applyValues(cfg.Bootnodes.Testnet,&params.TestnetBootnodes)
-	applyValues(cfg.Bootnodes.Rinkeby,&params.RinkebyBootnodes)
-	applyValues(cfg.Bootnodes.DiscoveryV5,&params.DiscoveryV5Bootnodes)
+	applyValues(cfg.Bootnodes.Mainnet, &params.MainnetBootnodes)
+	applyValues(cfg.Bootnodes.Testnet, &params.TestnetBootnodes)
+	applyValues(cfg.Bootnodes.Rinkeby, &params.RinkebyBootnodes)
+	applyValues(cfg.Bootnodes.DiscoveryV5, &params.DiscoveryV5Bootnodes)
 	// read passwords from enviroment
 	passwords := []string{}
 	for _, env := range cfg.Account.Passwords {
 		if trimmed := strings.TrimSpace(env); trimmed != "" {
 			value := os.Getenv(trimmed)
 			for _, info := range strings.Split(value, ",") {
-				if trimmed2 := strings.TrimSpace(info);trimmed2 != "" {
+				if trimmed2 := strings.TrimSpace(info); trimmed2 != "" {
 					passwords = append(passwords, trimmed2)
 				}
 			}
@@ -173,17 +172,18 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, tomoConfig) {
 	return stack, cfg
 }
 
-func applyValues(values []string,params *[]string )  {
-	data:=[]string{}
+func applyValues(values []string, params *[]string) {
+	data := []string{}
 	for _, value := range values {
-		if trimmed := strings.TrimSpace(value);value != "" {
+		if trimmed := strings.TrimSpace(value); value != "" {
 			data = append(data, trimmed)
 		}
 	}
-	if len(data)>0 {
+	if len(data) > 0 {
 		*params = data
 	}
 }
+
 // enableWhisper returns true in case one of the whisper flags is set.
 func enableWhisper(ctx *cli.Context) bool {
 	for _, flag := range whisperFlags {

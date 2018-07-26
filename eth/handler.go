@@ -80,10 +80,10 @@ type ProtocolManager struct {
 
 	SubProtocols []p2p.Protocol
 
-	eventMux      *event.TypeMux
-	txCh          chan core.TxPreEvent
-	txSub         event.Subscription
-	minedBlockSub *event.TypeMuxSubscription
+	eventMux       *event.TypeMux
+	txCh           chan core.TxPreEvent
+	txSub          event.Subscription
+	stakedBlockSub *event.TypeMuxSubscription
 
 	// channels for fetcher, syncer, txsyncLoop
 	newPeerCh   chan *peer
@@ -158,6 +158,9 @@ func NewProtocolManager(config *params.ChainConfig, mode downloader.SyncMode, ne
 	if len(manager.SubProtocols) == 0 {
 		return nil, errIncompatibleConfig
 	}
+
+
+
 	// Construct the different synchronisation mechanisms
 	manager.downloader = downloader.New(mode, chaindb, manager.eventMux, blockchain, nil, manager.removePeer)
 
@@ -208,9 +211,9 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 	pm.txSub = pm.txpool.SubscribeTxPreEvent(pm.txCh)
 	go pm.txBroadcastLoop()
 
-	// broadcast mined blocks
-	pm.minedBlockSub = pm.eventMux.Subscribe(core.NewMinedBlockEvent{})
-	go pm.minedBroadcastLoop()
+	// broadcast staked blocks
+	pm.stakedBlockSub = pm.eventMux.Subscribe(core.NewStakedBlockEvent{})
+	go pm.stakedBroadcastLoop()
 
 	// start sync handlers
 	go pm.syncer()
@@ -220,8 +223,8 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 func (pm *ProtocolManager) Stop() {
 	log.Info("Stopping Ethereum protocol")
 
-	pm.txSub.Unsubscribe()         // quits txBroadcastLoop
-	pm.minedBlockSub.Unsubscribe() // quits blockBroadcastLoop
+	pm.txSub.Unsubscribe()          // quits txBroadcastLoop
+	pm.stakedBlockSub.Unsubscribe() // quits blockBroadcastLoop
 
 	// Quit the sync loop.
 	// After this send has completed, no new peers will be accepted.
@@ -724,12 +727,12 @@ func (pm *ProtocolManager) BroadcastTx(hash common.Hash, tx *types.Transaction) 
 	log.Trace("Broadcast transaction", "hash", hash, "recipients", len(peers))
 }
 
-// Mined broadcast loop
-func (self *ProtocolManager) minedBroadcastLoop() {
+// Staked broadcast loop
+func (self *ProtocolManager) stakedBroadcastLoop() {
 	// automatically stops if unsubscribe
-	for obj := range self.minedBlockSub.Chan() {
+	for obj := range self.stakedBlockSub.Chan() {
 		switch ev := obj.Data.(type) {
-		case core.NewMinedBlockEvent:
+		case core.NewStakedBlockEvent:
 			self.BroadcastBlock(ev.Block, true)  // First propagate block to peers
 			self.BroadcastBlock(ev.Block, false) // Only then announce to the rest
 		}

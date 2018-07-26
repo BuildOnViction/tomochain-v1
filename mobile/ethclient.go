@@ -269,7 +269,7 @@ func (ec *EthereumClient) GetPendingTransactionCount(ctx *Context) (count int, _
 // Contract Calling
 
 // CallContract executes a message call transaction, which is directly executed in the VM
-// of the node, but never mined into the blockchain.
+// of the node, but never staked into the blockchain.
 //
 // blockNumber selects the block height at which the call runs. It can be <0, in which
 // case the code is taken from the latest known block. Note that state from very old
@@ -296,7 +296,7 @@ func (ec *EthereumClient) SuggestGasPrice(ctx *Context) (price *BigInt, _ error)
 
 // EstimateGas tries to estimate the gas needed to execute a specific transaction based on
 // the current pending state of the backend blockchain. There is no guarantee that this is
-// the true gas limit requirement as other transactions may be added or removed by miners,
+// the true gas limit requirement as other transactions may be added or removed by stakers,
 // but it should provide a basis for setting a reasonable default.
 func (ec *EthereumClient) EstimateGas(ctx *Context, msg *CallMsg) (gas int64, _ error) {
 	rawGas, err := ec.client.EstimateGas(ctx.context, msg.msg)
@@ -306,7 +306,7 @@ func (ec *EthereumClient) EstimateGas(ctx *Context, msg *CallMsg) (gas int64, _ 
 // SendTransaction injects a signed transaction into the pending pool for execution.
 //
 // If the transaction was a contract creation use the TransactionReceipt method to get the
-// contract address after the transaction has been mined.
+// contract address after the transaction has been staked.
 func (ec *EthereumClient) SendTransaction(ctx *Context, tx *Transaction) error {
 	return ec.client.SendTransaction(ctx.context, tx.tx)
 }
