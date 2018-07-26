@@ -106,7 +106,7 @@ func (w *wizard) makeGenesis() {
 		fmt.Println()
 		fmt.Println("How many blocks per checkpoint? (default = 990)")
 		genesis.Config.Clique.Epoch = uint64(w.readDefaultInt(990))
-		genesis.Config.Clique.RewardCheckpoint = genesis.Config.Clique.RewardCheckpoint
+		genesis.Config.Clique.RewardCheckpoint = genesis.Config.Clique.Epoch
 
 	default:
 		log.Crit("Invalid consensus engine choice", "choice", choice)
