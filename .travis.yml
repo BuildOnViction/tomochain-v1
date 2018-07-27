@@ -61,7 +61,7 @@ jobs:
       - docker build -t tomochain/tomochain .
       - docker run tomochain/tomochain
     install: skip
-    script: echo "deploy" > stash
+    script: skip
     deploy:
       - provider: script
         script:
