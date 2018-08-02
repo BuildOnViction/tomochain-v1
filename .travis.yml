@@ -1,11 +1,10 @@
 sudo: required
 language: go
 go_import_path: github.com/ethereum/go-ethereum
-services: skip
-before_install: skip
 
 jobs:
   include:
+
   - stage: Lint
     os: linux
     sudo: false
@@ -15,6 +14,7 @@ jobs:
       submodules: false
       script:
         - go run build/ci.go lint
+
   - stage: Build and test
     os: linux
     dist: trusty
@@ -38,28 +38,61 @@ jobs:
     - while sleep 540; do echo "[ still running ]"; done &
     - go run build/ci.go test -coverage
     - kill %1
-  - stage: Build and push Docker image
-    services:
-      - docker
-    before_install:
-      - docker build -t tomochain/tomochain .
-      - docker run tomochain/tomochain
+
+  - stage: Github release
+    script:
+      - make tomo-linux-amd64
     deploy:
-      provider: script
-      script: bash docker_push.sh
+      provider: releases
+      api_key: $GITHUB_TOKEN
+      file:
+        - "build/bin/tomo-linux-amd64"
+      skip_cleanup: true
       on:
         branch: master
-  - stage: Trigger rebuild of infrastructure image
-    sudo: false
-    script: bash docker_rebuild.sh
+        tags: true
+
+  - stage: Build and push untagged commit into image tomochain
+    services:
+      - docker
+    install: skip
+    before_script:
+      - docker build -t tomochain/tomochain .
+      - docker run tomochain/tomochain
+    script:
+      - echo "$DOCKER_PASSWORD" | docker login --username "$DOCKER_USERNAME" --password-stdin
+      - docker tag tomochain/tomochain tomochain/tomochain:latest
+      - docker push tomochain/tomochain:latest
+      - docker tag tomochain/tomochain tomochain/tomochain:$TRAVIS_BUILD_ID
+      - docker push tomochain/tomochain:$TRAVIS_BUILD_ID
+    after_success:
+      - curl -X POST $INFRA_IMAGE_REBUILD_HOOK
+
+  - stage: Build and push tagged commit into image tomochain
+    services:
+      - docker
+    install: skip
+    before_script:
+      - docker build -t tomochain/tomochain .
+      - docker run tomochain/tomochain
+    script:
+      - echo "$DOCKER_PASSWORD" | docker login --username "$DOCKER_USERNAME" --password-stdin
+      - docker tag tomochain/tomochain tomochain/tomochain:latest
+      - docker push tomochain/tomochain:latest
+      - docker tag tomochain/tomochain tomochain/tomochain:$TRAVIS_TAG
+      - docker push tomochain/tomochain:$TRAVIS_TAG
+    after_success:
+      - curl -X POST $INFRA_IMAGE_REBUILD_HOOK
 
 stages:
   - name: Lint
   - name: Build and test
-  - name: Build and push Docker image
-    if: type != pull_request AND branch = master
-  - name: Trigger rebuild of infrastructure image
-    if: type != pull_request AND branch = master
+  - name: Github release
+    if: type != pull_request AND branch = master AND tag = true AND repo = tomochain/tomochain
+  - name: Build and push untagged commit into image tomochain
+    if: type != pull_request AND branch = master AND tag IS blank AND repo = tomochain/tomochain
+  - name: Build and push tagged commit into image tomochain
+    if: type != pull_request AND branch = master AND tag = true AND repo = tomochain/tomochain
 
 notifications:
   slack:

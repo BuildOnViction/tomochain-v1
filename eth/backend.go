@@ -213,10 +213,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 			client, err := eth.GetClient()
 			if err != nil {
 				log.Error("Fail to connect IPC client for blockSigner", "error", err)
-
-				return err
 			}
-
 			number := header.Number.Uint64()
 			rCheckpoint := chain.Config().Clique.RewardCheckpoint
 			// Calculate reward at reward checkpoint.
@@ -225,7 +222,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 				addr := common.HexToAddress(common.BlockSigners)
 				chainReward := new(big.Int).SetUint64(chain.Config().Clique.Reward * params.Ether)
 				totalSigner := new(uint64)
-				signers, err := contracts.GetRewardForCheckpoint(addr, number, rCheckpoint, client, totalSigner)
+				signers, err := contracts.GetRewardForCheckpoint(chain, addr, number, rCheckpoint, client, totalSigner)
 				if err != nil {
 					log.Error("Fail to get signers for reward checkpoint", "error", err)
 				}
@@ -473,9 +470,7 @@ func (s *Ethereum) UpdateMasternodes(ms []clique.Masternode) error {
 		return errors.New("not clique")
 	}
 	c := s.engine.(*clique.Clique)
-	check := c.UpdateMasternodes(s.blockchain, s.blockchain.CurrentHeader(), ms)
-
-	return check
+  return c.UpdateMasternodes(s.blockchain, s.blockchain.CurrentHeader(), ms)
 }
 
 func (s *Ethereum) StartStaking(local bool) error {
@@ -503,8 +498,8 @@ func (s *Ethereum) StartStaking(local bool) error {
 	return nil
 }
 
-func (s *Ethereum) StopMining()         { s.miner.Stop() }
-func (s *Ethereum) IsMining() bool      { return s.miner.Mining() }
+func (s *Ethereum) StopStaking()        { s.miner.Stop() }
+func (s *Ethereum) IsStaking() bool     { return s.miner.Mining() }
 func (s *Ethereum) Miner() *miner.Miner { return s.miner }
 
 func (s *Ethereum) AccountManager() *accounts.Manager  { return s.accountManager }
