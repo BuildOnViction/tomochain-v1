@@ -200,7 +200,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 				return
 			}
 			if _, authorized := snap.Signers[eth.etherbase]; authorized {
-				if err := contracts.CreateTransactionSign(chainConfig, eth.txPool, eth.accountManager, block); err != nil {
+				if err := contracts.CreateTransactionSign(chainConfig, eth.txPool, eth.accountManager, block, chainDb); err != nil {
 					log.Error("Fail to create tx sign for imported block", "error", err)
 					return
 				}
@@ -209,14 +209,15 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		eth.protocolManager.fetcher.SetImportedHook(importedHook)
 
 		// Hook reward for clique validator.
-		c.HookReward = func(chain consensus.ChainReader, state *state.StateDB, header *types.Header) error {
+		c.HookFinalizeBlock = func(chain consensus.ChainReader, state *state.StateDB, header *types.Header) error {
 			client, err := eth.GetClient()
 			if err != nil {
 				log.Error("Fail to connect IPC client for blockSigner", "error", err)
 			}
 			number := header.Number.Uint64()
 			rCheckpoint := chain.Config().Clique.RewardCheckpoint
-			if number > 0 && number-rCheckpoint > 0 {
+			// Calculate reward at reward checkpoint.
+			if number > 0 && number%rCheckpoint == 0 && number-rCheckpoint > 0 {
 				// Get signers in blockSigner smartcontract.
 				addr := common.HexToAddress(common.BlockSigners)
 				chainReward := new(big.Int).SetUint64(chain.Config().Clique.Reward * params.Ether)
@@ -246,6 +247,39 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 					}
 				}
 			}
+
+			// Check m2 exists on chaindb.
+			// Get secrets and opening at epoc block checkpoint.
+			if number > 0 && number%contracts.EpocBlockRandomize == 0 {
+				var candidates [][]int64
+				// Get signers from snapshot.
+				snap, err := c.GetSnapshot(eth.blockchain, chain.CurrentHeader())
+				if err != nil {
+					log.Error("Fail to get snapshot for get secret and opening.", "error", err)
+					return err
+				}
+				signers := snap.Signers
+
+				if len(signers) > 0 {
+					for addr := range signers {
+						random, err := contracts.GetRandomizeFromContract(client, addr)
+						if err != nil {
+							log.Error("Fail to get random m2 from contract.", "error", err)
+						}
+						if random != nil {
+							candidates = append(candidates, random)
+						}
+					}
+				}
+
+				// Get randomize m2 list.
+				m2, err := contracts.GenM2FromRandomize(candidates)
+				if err != nil {
+					log.Error("Can not get m2 from randomize SC", "error", err)
+				}
+				log.Debug("list m2", "M2", m2)
+			}
+
 			return nil
 		}
 	}
@@ -436,7 +470,7 @@ func (s *Ethereum) UpdateMasternodes(ms []clique.Masternode) error {
 		return errors.New("not clique")
 	}
 	c := s.engine.(*clique.Clique)
-	return c.UpdateMasternodes(s.blockchain, s.blockchain.CurrentHeader(), ms)
+  return c.UpdateMasternodes(s.blockchain, s.blockchain.CurrentHeader(), ms)
 }
 
 func (s *Ethereum) StartStaking(local bool) error {

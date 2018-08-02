@@ -43,7 +43,7 @@ func NewRandomize(transactOpts *bind.TransactOpts, contractAddr common.Address, 
 }
 
 func DeployRandomize(transactOpts *bind.TransactOpts, contractBackend bind.ContractBackend) (common.Address, *Randomize, error) {
-	randomizeAddr, _, _, err := contract.DeployTomoRandomize(transactOpts, contractBackend, big.NewInt(2), big.NewInt(0), big.NewInt(1))
+	randomizeAddr, _, _, err := contract.DeployTomoRandomize(transactOpts, contractBackend, big.NewInt(8))
 	if err != nil {
 		return randomizeAddr, nil, err
 	}

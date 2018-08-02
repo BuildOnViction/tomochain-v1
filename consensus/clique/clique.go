@@ -212,7 +212,7 @@ type Clique struct {
 	signFn SignerFn       // Signer function to authorize hashes with
 	lock   sync.RWMutex   // Protects the signer fields
 
-	HookReward func(chain consensus.ChainReader, state *state.StateDB, header *types.Header) error
+	HookFinalizeBlock func(chain consensus.ChainReader, state *state.StateDB, header *types.Header) error
 }
 
 // New creates a Clique proof-of-authority consensus engine with the initial
@@ -667,11 +667,8 @@ func (c *Clique) UpdateMasternodes(chain consensus.ChainReader, header *types.He
 func (c *Clique) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
 	// set block reward
 	// FIXME: unit Ether could be too plump
-	number := header.Number.Uint64()
-	rCheckpoint := chain.Config().Clique.RewardCheckpoint
-
-	if c.HookReward != nil && number%rCheckpoint == 0 {
-		if err := c.HookReward(chain, state, header); err != nil {
+	if c.HookFinalizeBlock != nil {
+		if err := c.HookFinalizeBlock(chain, state, header); err != nil {
 			return nil, err
 		}
 	}
