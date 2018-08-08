@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
-package clique
+package posv
 
 import (
 	"bytes"
@@ -371,10 +371,10 @@ func TestVoting(t *testing.T) {
 			}
 			accounts.sign(headers[j], vote.signer)
 		}
-		// Pass all the headers through clique and ensure tallying succeeds
+		// Pass all the headers through posv and ensure tallying succeeds
 		head := headers[len(headers)-1]
 
-		snap, err := New(&params.CliqueConfig{Epoch: tt.epoch}, db).snapshot(&testerChainReader{db: db}, head.Number.Uint64(), head.Hash(), headers)
+		snap, err := New(&params.PosvConfig{Epoch: tt.epoch}, db).snapshot(&testerChainReader{db: db}, head.Number.Uint64(), head.Hash(), headers)
 		if err != nil {
 			t.Errorf("test %d: failed to create voting snapshot: %v", i, err)
 			continue

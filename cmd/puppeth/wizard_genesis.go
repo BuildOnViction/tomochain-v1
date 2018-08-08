@@ -49,9 +49,9 @@ func (w *wizard) makeGenesis() {
 	}
 	// Figure out which consensus engine to choose
 	fmt.Println()
-	fmt.Println("Which consensus engine to use? (default = clique)")
+	fmt.Println("Which consensus engine to use? (default = posv)")
 	fmt.Println(" 1. Ethash - proof-of-work")
-	fmt.Println(" 2. Clique - proof-of-authority")
+	fmt.Println(" 2. Posv - proof-of-authority")
 
 	choice := w.read()
 	switch {
@@ -61,20 +61,20 @@ func (w *wizard) makeGenesis() {
 		genesis.ExtraData = make([]byte, 32)
 
 	case choice == "" || choice == "2":
-		// In the case of clique, configure the consensus parameters
+		// In the case of posv, configure the consensus parameters
 		genesis.Difficulty = big.NewInt(1)
-		genesis.Config.Clique = &params.CliqueConfig{
+		genesis.Config.Posv = &params.PosvConfig{
 			Period: 15,
 			Epoch:  30000,
 			Reward: 0,
 		}
 		fmt.Println()
 		fmt.Println("How many seconds should blocks take? (default = 15)")
-		genesis.Config.Clique.Period = uint64(w.readDefaultInt(15))
+		genesis.Config.Posv.Period = uint64(w.readDefaultInt(15))
 
 		fmt.Println()
 		fmt.Println("How many Ethers should be rewarded to signer? (default = 0)")
-		genesis.Config.Clique.Reward = uint64(w.readDefaultInt(0))
+		genesis.Config.Posv.Reward = uint64(w.readDefaultInt(0))
 
 		// We also need the initial list of signers
 		fmt.Println()
@@ -105,12 +105,12 @@ func (w *wizard) makeGenesis() {
 
 		fmt.Println()
 		fmt.Println("How many blocks per checkpoint? (default = 990)")
-		genesis.Config.Clique.Epoch = uint64(w.readDefaultInt(990))
-		genesis.Config.Clique.RewardCheckpoint = genesis.Config.Clique.Epoch
+		genesis.Config.Posv.Epoch = uint64(w.readDefaultInt(990))
+		genesis.Config.Posv.RewardCheckpoint = genesis.Config.Posv.Epoch
 
 		fmt.Println()
 		fmt.Println("How many blocks before checkpoint need to prepare new set of masternodes? (default = 50)")
-		genesis.Config.Clique.Gap = uint64(w.readDefaultInt(50))
+		genesis.Config.Posv.Gap = uint64(w.readDefaultInt(50))
 
 	default:
 		log.Crit("Invalid consensus engine choice", "choice", choice)
