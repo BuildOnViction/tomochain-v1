@@ -131,7 +131,7 @@ func (c *EthashConfig) String() string {
 	return "ethash"
 }
 
-// PosvConfig is the consensus engine configs for proof-of-authority based sealing.
+// PosvConfig is the consensus engine configs for proof-of-stake-voting based sealing.
 type PosvConfig struct {
 	Period           uint64 `json:"period"`           // Number of seconds between blocks to enforce
 	Epoch            uint64 `json:"epoch"`            // Epoch length to reset votes and checkpoint

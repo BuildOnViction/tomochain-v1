@@ -51,7 +51,7 @@ func (w *wizard) makeGenesis() {
 	fmt.Println()
 	fmt.Println("Which consensus engine to use? (default = posv)")
 	fmt.Println(" 1. Ethash - proof-of-work")
-	fmt.Println(" 2. Posv - proof-of-authority")
+	fmt.Println(" 2. Posv - proof-of-stake-voting")
 
 	choice := w.read()
 	switch {

@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
-// Package posv implements the proof-of-authority consensus engine.
+// Package posv implements the proof-of-stake-voting consensus engine.
 package posv
 
 import (
@@ -55,7 +55,7 @@ type Masternode struct {
 	Stake   string
 }
 
-// Posv proof-of-authority protocol constants.
+// Posv proof-of-stake-voting protocol constants.
 var (
 	epochLength = uint64(30000) // Default number of blocks after which to checkpoint and reset the pending votes
 	blockPeriod = uint64(15)    // Default minimum difference between two consecutive block's timestamps
@@ -141,7 +141,7 @@ var (
 // backing account.
 type SignerFn func(accounts.Account, []byte) ([]byte, error)
 
-// sigHash returns the hash which is used as input for the proof-of-authority
+// sigHash returns the hash which is used as input for the proof-of-stake-voting
 // signing. It is the hash of the entire header apart from the 65 byte signature
 // contained at the end of the extra data.
 //
@@ -197,7 +197,7 @@ func ecrecover(header *types.Header, sigcache *lru.ARCCache) (common.Address, er
 	return signer, nil
 }
 
-// Posv is the proof-of-authority consensus engine proposed to support the
+// Posv is the proof-of-stake-voting consensus engine proposed to support the
 // Ethereum testnet following the Ropsten attacks.
 type Posv struct {
 	config *params.PosvConfig // Consensus engine configuration parameters
@@ -215,7 +215,7 @@ type Posv struct {
 	HookReward func(chain consensus.ChainReader, state *state.StateDB, header *types.Header) error
 }
 
-// New creates a Posv proof-of-authority consensus engine with the initial
+// New creates a Posv proof-of-stake-voting consensus engine with the initial
 // signers set to the ones provided by the user.
 func New(config *params.PosvConfig, db ethdb.Database) *Posv {
 	// Set any missing consensus parameters to their defaults

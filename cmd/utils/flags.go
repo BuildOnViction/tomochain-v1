@@ -137,11 +137,11 @@ var (
 	}
 	RinkebyFlag = cli.BoolFlag{
 		Name:  "rinkeby",
-		Usage: "Rinkeby network: pre-configured proof-of-authority test network",
+		Usage: "Rinkeby network: pre-configured proof-of-stake-voting test network",
 	}
 	DeveloperFlag = cli.BoolFlag{
 		Name:  "dev",
-		Usage: "Ephemeral proof-of-authority network with a pre-funded developer account, mining enabled",
+		Usage: "Ephemeral proof-of-stake-voting network with a pre-funded developer account, mining enabled",
 	}
 	DeveloperPeriodFlag = cli.IntFlag{
 		Name:  "dev.period",
