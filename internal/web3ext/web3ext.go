@@ -20,7 +20,7 @@ package web3ext
 var Modules = map[string]string{
 	"admin":      Admin_JS,
 	"chequebook": Chequebook_JS,
-	"clique":     Clique_JS,
+	"posv":     Clique_JS,
 	"debug":      Debug_JS,
 	"eth":        Eth_JS,
 	"miner":      Miner_JS,
@@ -65,7 +65,7 @@ web3._extend({
 
 const Clique_JS = `
 web3._extend({
-	property: 'clique',
+	property: 'posv',
 	methods: [
 		new web3._extend.Method({
 			name: 'getSnapshot',
