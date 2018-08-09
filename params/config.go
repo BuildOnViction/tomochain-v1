@@ -120,6 +120,7 @@ type ChainConfig struct {
 
 	// Various consensus engines
 	Ethash *EthashConfig `json:"ethash,omitempty"`
+	Clique *CliqueConfig `json:"clique,omitempty"`
 	Posv   *PosvConfig   `json:"posv,omitempty"`
 }
 
