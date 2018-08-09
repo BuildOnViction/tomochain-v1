@@ -130,7 +130,6 @@ type EthashConfig struct{}
 func (c *EthashConfig) String() string {
 	return "ethash"
 }
-
 // PosvConfig is the consensus engine configs for proof-of-stake-voting based sealing.
 type PosvConfig struct {
 	Period           uint64 `json:"period"`           // Number of seconds between blocks to enforce
