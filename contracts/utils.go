@@ -193,6 +193,11 @@ func CalculateRewardForHolders(validator *contractValidator.TomoValidator, state
 
 // Get reward balance rates for master node, founder and holders.
 func GetRewardBalancesRate(masterAddr common.Address, totalReward *big.Int, validator *contractValidator.TomoValidator) (map[common.Address]*big.Int, error) {
+	validAddr := ValidateAddr(masterAddr)
+	if ! validAddr {
+		return nil, nil
+	}
+
 	owner := GetCandidatesOwnerBySigner(validator, masterAddr)
 	balances := make(map[common.Address]*big.Int)
 	rewardMaster := new(big.Int).Mul(totalReward, new(big.Int).SetInt64(RewardMasterPercent))
@@ -213,14 +218,17 @@ func GetRewardBalancesRate(masterAddr common.Address, totalReward *big.Int, vali
 		// Get voters capacities.
 		voterCaps := make(map[common.Address]*big.Int)
 		for _, voteAddr := range voters {
-			voterCap, err := validator.GetVoterCap(opts, masterAddr, voteAddr)
-			if err != nil {
-				log.Error("Fail to get vote capacity", "error", err)
-				return nil, err
-			}
+			validVoterAddr := ValidateAddr(voteAddr)
+			if validVoterAddr {
+				voterCap, err := validator.GetVoterCap(opts, masterAddr, voteAddr)
+				if err != nil {
+					log.Error("Fail to get vote capacity", "error", err)
+					return nil, err
+				}
 
-			totalCap.Add(totalCap, voterCap)
-			voterCaps[voteAddr] = voterCap
+				totalCap.Add(totalCap, voterCap)
+				voterCaps[voteAddr] = voterCap
+			}
 		}
 		if totalCap.Cmp(new(big.Int).SetInt64(0)) > 0 {
 			for addr, voteCap := range voterCaps {
@@ -250,4 +258,13 @@ func GetRewardBalancesRate(masterAddr common.Address, totalReward *big.Int, vali
 	log.Info("Holders reward", "holders", string(jsonHolders), "master node", masterAddr.String())
 
 	return balances, nil
+}
+
+// Validate address of masternode and voter.
+func ValidateAddr(addr common.Address) bool {
+	if addr != common.StringToAddress("0x0000000000000000000000000000000000000000") {
+		return true
+	}
+
+	return false
 }
