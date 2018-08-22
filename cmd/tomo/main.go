@@ -217,27 +217,33 @@ func main() {
 // It creates a default node based on the command line arguments and runs it in
 // blocking mode, waiting for it to be shut down.
 func tomo(ctx *cli.Context) error {
-	node := makeFullNode(ctx)
-	startNode(ctx, node)
+	node,cfg := makeFullNode(ctx)
+	startNode(ctx, node,cfg)
 	node.Wait()
 	return nil
 }
 
 // startNode boots up the system node and all registered protocols, after which
 // it unlocks any requested accounts, and starts the RPC/IPC interfaces and the
-// miner.
-func startNode(ctx *cli.Context, stack *node.Node) {
+// staker.
+func startNode(ctx *cli.Context, stack *node.Node,cfg tomoConfig) {
 	// Start up the node itself
 	utils.StartNode(stack)
 
 	// Unlock any account specifically requested
 	ks := stack.AccountManager().Backends(keystore.KeyStoreType)[0].(*keystore.KeyStore)
 
-	passwords := utils.MakePasswordList(ctx)
-	unlocks := strings.Split(ctx.GlobalString(utils.UnlockedAccountFlag.Name), ",")
-	for i, account := range unlocks {
+	if(ctx.GlobalIsSet(utils.UnlockedAccountFlag.Name)) {
+		cfg.Account.Unlocks=strings.Split(ctx.GlobalString(utils.UnlockedAccountFlag.Name), ",")
+	}
+
+	if(ctx.GlobalIsSet(utils.PasswordFileFlag.Name)) {
+		cfg.Account.Passwords=utils.MakePasswordList(ctx)
+	}
+
+	for i, account := range cfg.Account.Unlocks {
 		if trimmed := strings.TrimSpace(account); trimmed != "" {
-			unlockAccount(ctx, ks, trimmed, i, passwords)
+			unlockAccount(ctx, ks, trimmed, i, cfg.Account.Passwords)
 		}
 	}
 	// Register wallet event handlers to open and auto-derive wallets
@@ -282,8 +288,8 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 		}
 	}()
 	// Start auxiliary services if enabled
-	if ctx.GlobalBool(utils.StakingEnabledFlag.Name) || ctx.GlobalBool(utils.DeveloperFlag.Name) {
-		// Mining only makes sense if a full Ethereum node is running
+	if cfg.StakeEnable || ctx.GlobalBool(utils.DeveloperFlag.Name) {
+		// Staking only makes sense if a full Ethereum node is running
 		if ctx.GlobalBool(utils.LightModeFlag.Name) || ctx.GlobalString(utils.SyncModeFlag.Name) == "light" {
 			utils.Fatalf("Light clients do not support staking")
 		}
@@ -308,8 +314,8 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 						th.SetThreads(threads)
 					}
 				}
-				// Set the gas price to the limits from the CLI and start mining
-				ethereum.TxPool().SetGasPrice(utils.GlobalBig(ctx, utils.GasPriceFlag.Name))
+				// Set the gas price to the limits from the CLI and start staking
+				ethereum.TxPool().SetGasPrice(cfg.Eth.GasPrice)
 				if err := ethereum.StartStaking(true); err != nil {
 					utils.Fatalf("Failed to start staking: %v", err)
 				}
@@ -331,7 +337,7 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 							log.Info("Only masternode can propose and verify blocks. Cancelling staking on this node...")
 							ethereum.StopStaking()
 							started = false
-							log.Info("Cancelled mining mode!!!")
+							log.Info("Cancelled staking mode!!!")
 						}
 					} else if !started {
 						log.Info("Masternode found. Enabling staking mode...")
@@ -344,8 +350,8 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 								th.SetThreads(threads)
 							}
 						}
-						// Set the gas price to the limits from the CLI and start mining
-						ethereum.TxPool().SetGasPrice(utils.GlobalBig(ctx, utils.GasPriceFlag.Name))
+						// Set the gas price to the limits from the CLI and start staking
+						ethereum.TxPool().SetGasPrice(cfg.Eth.GasPrice)
 						if err := ethereum.StartStaking(true); err != nil {
 							utils.Fatalf("Failed to start staking: %v", err)
 						}

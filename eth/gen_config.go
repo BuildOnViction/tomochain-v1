@@ -17,23 +17,23 @@ var _ = (*configMarshaling)(nil)
 
 func (c Config) MarshalTOML() (interface{}, error) {
 	type Config struct {
-		Genesis                 *core.Genesis `toml:",omitempty"`
+		Genesis                 *core.Genesis  `toml:",omitempty"`
 		NetworkId               uint64
 		SyncMode                downloader.SyncMode
-		LightServ               int  `toml:",omitempty"`
-		LightPeers              int  `toml:",omitempty"`
-		SkipBcVersionCheck      bool `toml:"-"`
-		DatabaseHandles         int  `toml:"-"`
+		LightServ               int            `toml:",omitempty"`
+		LightPeers              int            `toml:",omitempty"`
+		SkipBcVersionCheck      bool           `toml:"-"`
+		DatabaseHandles         int            `toml:"-"`
 		DatabaseCache           int
 		Etherbase               common.Address `toml:",omitempty"`
-		MinerThreads            int            `toml:",omitempty"`
+		StakerThreads           int            `toml:",omitempty"`
 		ExtraData               hexutil.Bytes  `toml:",omitempty"`
 		GasPrice                *big.Int
 		Ethash                  ethash.Config
 		TxPool                  core.TxPoolConfig
 		GPO                     gasprice.Config
 		EnablePreimageRecording bool
-		DocRoot                 string `toml:"-"`
+		DocRoot                 string         `toml:"-"`
 	}
 	var enc Config
 	enc.Genesis = c.Genesis
@@ -45,7 +45,7 @@ func (c Config) MarshalTOML() (interface{}, error) {
 	enc.DatabaseHandles = c.DatabaseHandles
 	enc.DatabaseCache = c.DatabaseCache
 	enc.Etherbase = c.Etherbase
-	enc.MinerThreads = c.MinerThreads
+	enc.StakerThreads = c.StakerThreads
 	enc.ExtraData = c.ExtraData
 	enc.GasPrice = c.GasPrice
 	enc.Ethash = c.Ethash
@@ -58,23 +58,23 @@ func (c Config) MarshalTOML() (interface{}, error) {
 
 func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	type Config struct {
-		Genesis                 *core.Genesis `toml:",omitempty"`
+		Genesis                 *core.Genesis   `toml:",omitempty"`
 		NetworkId               *uint64
 		SyncMode                *downloader.SyncMode
-		LightServ               *int  `toml:",omitempty"`
-		LightPeers              *int  `toml:",omitempty"`
-		SkipBcVersionCheck      *bool `toml:"-"`
-		DatabaseHandles         *int  `toml:"-"`
+		LightServ               *int            `toml:",omitempty"`
+		LightPeers              *int            `toml:",omitempty"`
+		SkipBcVersionCheck      *bool           `toml:"-"`
+		DatabaseHandles         *int            `toml:"-"`
 		DatabaseCache           *int
 		Etherbase               *common.Address `toml:",omitempty"`
-		MinerThreads            *int            `toml:",omitempty"`
+		StakerThreads           *int            `toml:",omitempty"`
 		ExtraData               *hexutil.Bytes  `toml:",omitempty"`
 		GasPrice                *big.Int
 		Ethash                  *ethash.Config
 		TxPool                  *core.TxPoolConfig
 		GPO                     *gasprice.Config
 		EnablePreimageRecording *bool
-		DocRoot                 *string `toml:"-"`
+		DocRoot                 *string         `toml:"-"`
 	}
 	var dec Config
 	if err := unmarshal(&dec); err != nil {
@@ -107,8 +107,8 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	if dec.Etherbase != nil {
 		c.Etherbase = *dec.Etherbase
 	}
-	if dec.MinerThreads != nil {
-		c.MinerThreads = *dec.MinerThreads
+	if dec.StakerThreads != nil {
+		c.StakerThreads = *dec.StakerThreads
 	}
 	if dec.ExtraData != nil {
 		c.ExtraData = *dec.ExtraData

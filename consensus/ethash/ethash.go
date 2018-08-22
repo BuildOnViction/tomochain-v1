@@ -157,7 +157,7 @@ type lru struct {
 }
 
 // newlru create a new least-recently-used cache for ither the verification caches
-// or the mining datasets.
+// or the staking datasets.
 func newlru(what string, maxItems int, new func(epoch uint64) interface{}) *lru {
 	if maxItems <= 0 {
 		maxItems = 1
@@ -281,7 +281,7 @@ type dataset struct {
 	once    sync.Once // Ensures the cache is generated only once
 }
 
-// newDataset creates a new ethash mining dataset and returns it as a plain Go
+// newDataset creates a new ethash staking dataset and returns it as a plain Go
 // interface to be usable in an LRU cache.
 func newDataset(epoch uint64) interface{} {
 	return &dataset{epoch: epoch}
@@ -380,12 +380,12 @@ const (
 
 // Config are the configuration parameters of the ethash.
 type Config struct {
-	CacheDir       string
-	CachesInMem    int
-	CachesOnDisk   int
-	DatasetDir     string
-	DatasetsInMem  int
-	DatasetsOnDisk int
+	CacheDir       string  `toml:"cachedir"`
+	CachesInMem    int	   `toml:"cachesinmem"`
+	CachesOnDisk   int		`toml:"cachesinmem"`
+	DatasetDir     string	`toml:"cachesinmem"`
+	DatasetsInMem  int		`toml:"cachesinmem"`
+	DatasetsOnDisk int		`toml:"cachesinmem"`
 	PowMode        Mode
 }
 
@@ -397,10 +397,10 @@ type Ethash struct {
 	caches   *lru // In memory caches to avoid regenerating too often
 	datasets *lru // In memory datasets to avoid regenerating too often
 
-	// Mining related fields
+	// Staking related fields
 	rand     *rand.Rand    // Properly seeded random source for nonces
-	threads  int           // Number of threads to mine on if mining
-	update   chan struct{} // Notification channel to update mining parameters
+	threads  int           // Number of threads to stake on if staking
+	update   chan struct{} // Notification channel to update staking parameters
 	hashrate metrics.Meter // Meter tracking the average hashrate
 
 	// The fields below are hooks for testing
@@ -408,7 +408,7 @@ type Ethash struct {
 	fakeFail  uint64        // Block number which fails PoW check even in fake mode
 	fakeDelay time.Duration // Time delay to sleep for before returning from verify
 
-	lock sync.Mutex // Ensures thread safety for the in-memory caches and mining fields
+	lock sync.Mutex // Ensures thread safety for the in-memory caches and staking fields
 }
 
 // New creates a full sized ethash PoW scheme.
@@ -508,7 +508,7 @@ func (ethash *Ethash) cache(block uint64) *cache {
 	return current
 }
 
-// dataset tries to retrieve a mining dataset for the specified block number
+// dataset tries to retrieve a staking dataset for the specified block number
 // by first checking against a list of in-memory datasets, then against DAGs
 // stored on disk, and finally generating one if none can be found.
 func (ethash *Ethash) dataset(block uint64) *dataset {
@@ -528,8 +528,8 @@ func (ethash *Ethash) dataset(block uint64) *dataset {
 	return current
 }
 
-// Threads returns the number of mining threads currently enabled. This doesn't
-// necessarily mean that mining is running!
+// Threads returns the number of staking threads currently enabled. This doesn't
+// necessarily mean that staking is running!
 func (ethash *Ethash) Threads() int {
 	ethash.lock.Lock()
 	defer ethash.lock.Unlock()
@@ -537,10 +537,10 @@ func (ethash *Ethash) Threads() int {
 	return ethash.threads
 }
 
-// SetThreads updates the number of mining threads currently enabled. Calling
-// this method does not start mining, only sets the thread count. If zero is
-// specified, the miner will use all cores of the machine. Setting a thread
-// count below zero is allowed and will cause the miner to idle, without any
+// SetThreads updates the number of staking threads currently enabled. Calling
+// this method does not start staking, only sets the thread count. If zero is
+// specified, the masternode will use all cores of the machine. Setting a thread
+// count below zero is allowed and will cause the masternode to idle, without any
 // work being done.
 func (ethash *Ethash) SetThreads(threads int) {
 	ethash.lock.Lock()
@@ -571,7 +571,7 @@ func (ethash *Ethash) APIs(chain consensus.ChainReader) []rpc.API {
 	return nil
 }
 
-// SeedHash is the seed to use for generating a verification cache and the mining
+// SeedHash is the seed to use for generating a verification cache and the staking
 // dataset.
 func SeedHash(block uint64) []byte {
 	return seedHash(block)

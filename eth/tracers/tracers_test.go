@@ -78,7 +78,7 @@ var makeTest = function(tx, rewind) {
       difficulty: block.difficulty,
       timestamp:  block.timestamp.toString(),
       gasLimit:   block.gasLimit.toString(),
-      miner:      block.miner,
+      masternode:      block.masternode,
     },
     input:  eth.getRawTransaction(tx),
     result: result,
@@ -105,7 +105,7 @@ type callContext struct {
 	Difficulty *math.HexOrDecimal256 `json:"difficulty"`
 	Time       math.HexOrDecimal64   `json:"timestamp"`
 	GasLimit   math.HexOrDecimal64   `json:"gasLimit"`
-	Miner      common.Address        `json:"miner"`
+	Staker     common.Address        `json:"stake"`
 }
 
 // callTracerTest defines a single test to check the call tracer against.
@@ -152,7 +152,7 @@ func TestCallTracer(t *testing.T) {
 				CanTransfer: core.CanTransfer,
 				Transfer:    core.Transfer,
 				Origin:      origin,
-				Coinbase:    test.Context.Miner,
+				Coinbase:    test.Context.Staker,
 				BlockNumber: new(big.Int).SetUint64(uint64(test.Context.Number)),
 				Time:        new(big.Int).SetUint64(uint64(test.Context.Time)),
 				Difficulty:  (*big.Int)(test.Context.Difficulty),

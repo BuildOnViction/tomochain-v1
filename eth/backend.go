@@ -45,7 +45,7 @@ import (
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/miner"
+	"github.com/ethereum/go-ethereum/masternode"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/params"
@@ -89,7 +89,7 @@ type Ethereum struct {
 
 	ApiBackend *EthApiBackend
 
-	miner     *miner.Miner
+	staker    *masternode.Staker
 	gasPrice  *big.Int
 	etherbase common.Address
 
@@ -173,8 +173,8 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	if eth.protocolManager, err = NewProtocolManager(eth.chainConfig, config.SyncMode, config.NetworkId, eth.eventMux, eth.txPool, eth.engine, eth.blockchain, chainDb); err != nil {
 		return nil, err
 	}
-	eth.miner = miner.New(eth, eth.chainConfig, eth.EventMux(), eth.engine)
-	eth.miner.SetExtra(makeExtraData(config.ExtraData))
+	eth.staker = masternode.New(eth, eth.chainConfig, eth.EventMux(), eth.engine)
+	eth.staker.SetExtra(makeExtraData(config.ExtraData))
 
 	eth.ApiBackend = &EthApiBackend{eth, nil}
 	gpoParams := config.GPO
@@ -269,7 +269,7 @@ func makeExtraData(extra []byte) []byte {
 		})
 	}
 	if uint64(len(extra)) > params.MaximumExtraDataSize {
-		log.Warn("Miner extra data exceed limit", "extra", hexutil.Bytes(extra), "limit", params.MaximumExtraDataSize)
+		log.Warn("Staker extra data exceed limit", "extra", hexutil.Bytes(extra), "limit", params.MaximumExtraDataSize)
 		extra = nil
 	}
 	return extra
@@ -313,7 +313,7 @@ func CreateConsensusEngine(ctx *node.ServiceContext, config *ethash.Config, chai
 			DatasetsInMem:  config.DatasetsInMem,
 			DatasetsOnDisk: config.DatasetsOnDisk,
 		})
-		engine.SetThreads(-1) // Disable CPU mining
+		engine.SetThreads(-1) // Disable CPU staking
 		return engine
 	}
 }
@@ -336,7 +336,7 @@ func (s *Ethereum) APIs() []rpc.API {
 		}, {
 			Namespace: "eth",
 			Version:   "1.0",
-			Service:   NewPublicMinerAPI(s),
+			Service:   NewPublicStakerAPI(s),
 			Public:    true,
 		}, {
 			Namespace: "eth",
@@ -344,9 +344,9 @@ func (s *Ethereum) APIs() []rpc.API {
 			Service:   downloader.NewPublicDownloaderAPI(s.protocolManager.downloader, s.eventMux),
 			Public:    true,
 		}, {
-			Namespace: "miner",
+			Namespace: "staker",
 			Version:   "1.0",
-			Service:   NewPrivateMinerAPI(s),
+			Service:   NewPrivateStakerAPI(s),
 			Public:    false,
 		}, {
 			Namespace: "eth",
@@ -408,28 +408,28 @@ func (self *Ethereum) SetEtherbase(etherbase common.Address) {
 	self.etherbase = etherbase
 	self.lock.Unlock()
 
-	self.miner.SetEtherbase(etherbase)
+	self.staker.SetEtherbase(etherbase)
 }
 
-// ValidateMiner checks if node's address is in set of validators
+// ValidateStaker checks if node's address is in set of validators
 func (s *Ethereum) ValidateStaker() (bool, error) {
 	eb, err := s.Etherbase()
 	if err != nil {
 		return false, err
 	}
 	if s.chainConfig.Posv != nil {
-		//check if miner's wallet is in set of validators
+		//check if staker's wallet is in set of validators
 		c := s.engine.(*posv.Posv)
 		snap, err := c.GetSnapshot(s.blockchain, s.blockchain.CurrentHeader())
 		if err != nil {
-			return false, fmt.Errorf("Can't verify miner: %v", err)
+			return false, fmt.Errorf("Can't verify staker: %v", err)
 		}
 		if _, authorized := snap.Signers[eb]; !authorized {
-			//This miner doesn't belong to set of validators
+			//This staker doesn't belong to set of validators
 			return false, nil
 		}
 	} else {
-		return false, fmt.Errorf("Only verify miners in Posv protocol")
+		return false, fmt.Errorf("Only verify stakers in Posv protocol")
 	}
 	return true, nil
 }
@@ -447,7 +447,7 @@ func (s *Ethereum) UpdateMasternodes(ms []posv.Masternode) error {
 func (s *Ethereum) StartStaking(local bool) error {
 	eb, err := s.Etherbase()
 	if err != nil {
-		log.Error("Cannot start mining without etherbase", "err", err)
+		log.Error("Cannot start staking without etherbase", "err", err)
 		return fmt.Errorf("etherbase missing: %v", err)
 	}
 	if posv, ok := s.engine.(*posv.Posv); ok {
@@ -459,19 +459,19 @@ func (s *Ethereum) StartStaking(local bool) error {
 		posv.Authorize(eb, wallet.SignHash)
 	}
 	if local {
-		// If local (CPU) mining is started, we can disable the transaction rejection
-		// mechanism introduced to speed sync times. CPU mining on mainnet is ludicrous
-		// so noone will ever hit this path, whereas marking sync done on CPU mining
-		// will ensure that private networks work in single miner mode too.
+		// If local (CPU) staking is started, we can disable the transaction rejection
+		// mechanism introduced to speed sync times. CPU staking on mainnet is ludicrous
+		// so noone will ever hit this path, whereas marking sync done on CPU staking
+		// will ensure that private networks work in single staker mode too.
 		atomic.StoreUint32(&s.protocolManager.acceptTxs, 1)
 	}
-	go s.miner.Start(eb)
+	go s.staker.Start(eb)
 	return nil
 }
 
-func (s *Ethereum) StopStaking()        { s.miner.Stop() }
-func (s *Ethereum) IsStaking() bool     { return s.miner.Mining() }
-func (s *Ethereum) Miner() *miner.Miner { return s.miner }
+func (s *Ethereum) StopStaking()               { s.staker.Stop() }
+func (s *Ethereum) IsStaking() bool            { return s.staker.Staking() }
+func (s *Ethereum) Staker() *masternode.Staker { return s.staker }
 
 func (s *Ethereum) AccountManager() *accounts.Manager  { return s.accountManager }
 func (s *Ethereum) BlockChain() *core.BlockChain       { return s.blockchain }
@@ -531,7 +531,7 @@ func (s *Ethereum) Stop() error {
 		s.lesServer.Stop()
 	}
 	s.txPool.Stop()
-	s.miner.Stop()
+	s.staker.Stop()
 	s.eventMux.Stop()
 
 	s.chainDb.Close()

@@ -141,11 +141,11 @@ var (
 	}
 	DeveloperFlag = cli.BoolFlag{
 		Name:  "dev",
-		Usage: "Ephemeral proof-of-authority network with a pre-funded developer account, mining enabled",
+		Usage: "Ephemeral proof-of-authority network with a pre-funded developer account, staking enabled",
 	}
 	DeveloperPeriodFlag = cli.IntFlag{
 		Name:  "dev.period",
-		Usage: "Block period to use in developer mode (0 = mine only if transaction pending)",
+		Usage: "Block period to use in developer mode (0 = stake only if transaction pending)",
 	}
 	IdentityFlag = cli.StringFlag{
 		Name:  "identity",
@@ -226,17 +226,17 @@ var (
 	}
 	EthashDatasetDirFlag = DirectoryFlag{
 		Name:  "ethash.dagdir",
-		Usage: "Directory to store the ethash mining DAGs (default = inside home folder)",
+		Usage: "Directory to store the ethash staking DAGs (default = inside home folder)",
 		Value: DirectoryString{eth.DefaultConfig.Ethash.DatasetDir},
 	}
 	EthashDatasetsInMemoryFlag = cli.IntFlag{
 		Name:  "ethash.dagsinmem",
-		Usage: "Number of recent ethash mining DAGs to keep in memory (1+GB each)",
+		Usage: "Number of recent ethash staking DAGs to keep in memory (1+GB each)",
 		Value: eth.DefaultConfig.Ethash.DatasetsInMem,
 	}
 	EthashDatasetsOnDiskFlag = cli.IntFlag{
 		Name:  "ethash.dagsondisk",
-		Usage: "Number of recent ethash mining DAGs to keep on disk (1+GB each)",
+		Usage: "Number of recent ethash staking DAGs to keep on disk (1+GB each)",
 		Value: eth.DefaultConfig.Ethash.DatasetsOnDisk,
 	}
 	// Transaction pool settings
@@ -310,34 +310,34 @@ var (
 		Usage: "Number of trie node generations to keep in memory",
 		Value: int(state.MaxTrieCacheGen),
 	}
-	// Miner settings
+	// staker settings
 	StakingEnabledFlag = cli.BoolFlag{
-		Name:  "mine",
+		Name:  "stake",
 		Usage: "Enable staking",
 	}
 	StakerThreadsFlag = cli.IntFlag{
-		Name:  "minerthreads",
+		Name:  "stakerthreads",
 		Usage: "Number of CPU threads to use for staking",
 		Value: runtime.NumCPU(),
 	}
 	TargetGasLimitFlag = cli.Uint64Flag{
 		Name:  "targetgaslimit",
-		Usage: "Target gas limit sets the artificial target gas floor for the blocks to mine",
+		Usage: "Target gas limit sets the artificial target gas floor for the blocks to stake",
 		Value: params.GenesisGasLimit,
 	}
 	EtherbaseFlag = cli.StringFlag{
 		Name:  "etherbase",
-		Usage: "Public address for block mining rewards (default = first account created)",
+		Usage: "Public address for block staking rewards (default = first account created)",
 		Value: "0",
 	}
 	GasPriceFlag = BigFlag{
 		Name:  "gasprice",
-		Usage: "Minimal gas price to accept for mining a transactions",
+		Usage: "Minimal gas price to accept for staking a transactions",
 		Value: eth.DefaultConfig.GasPrice,
 	}
 	ExtraDataFlag = cli.StringFlag{
 		Name:  "extradata",
-		Usage: "Block extra data set by the miner (default = client version)",
+		Usage: "Block extra data set by the staker (default = client version)",
 	}
 	// Account settings
 	UnlockedAccountFlag = cli.StringFlag{
@@ -1055,7 +1055,7 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 		cfg.TrieCache = ctx.GlobalInt(CacheFlag.Name) * ctx.GlobalInt(CacheGCFlag.Name) / 100
 	}
 	if ctx.GlobalIsSet(StakerThreadsFlag.Name) {
-		cfg.MinerThreads = ctx.GlobalInt(StakerThreadsFlag.Name)
+		cfg.StakerThreads = ctx.GlobalInt(StakerThreadsFlag.Name)
 	}
 	if ctx.GlobalIsSet(DocRootFlag.Name) {
 		cfg.DocRoot = ctx.GlobalString(DocRootFlag.Name)

@@ -42,13 +42,13 @@ ADD genesis.json /genesis.json
 RUN \
   echo 'tomo --cache 512 init /genesis.json' > tomo.sh && \{{if .Unlock}}
 	echo 'mkdir -p /root/.ethereum/keystore/ && cp /signer.json /root/.ethereum/keystore/' >> tomo.sh && \{{end}}
-	echo $'tomo --networkid {{.NetworkID}} --cache 512 --port {{.Port}} --maxpeers {{.Peers}} {{.LightFlag}} --ethstats \'{{.Ethstats}}\' {{if .Bootnodes}}--bootnodes {{.Bootnodes}}{{end}} {{if .Etherbase}}--etherbase {{.Etherbase}} --mine --minerthreads 1{{end}} {{if .Unlock}}--unlock 0 --password /signer.pass --mine{{end}} --targetgaslimit {{.GasTarget}} --gasprice {{.GasPrice}}' >> tomo.sh
+	echo $'tomo --networkid {{.NetworkID}} --cache 512 --port {{.Port}} --maxpeers {{.Peers}} {{.LightFlag}} --ethstats \'{{.Ethstats}}\' {{if .Bootnodes}}--bootnodes {{.Bootnodes}}{{end}} {{if .Etherbase}}--etherbase {{.Etherbase}} --stake --stakerthreads 1{{end}} {{if .Unlock}}--unlock 0 --password /signer.pass --stake{{end}} --targetgaslimit {{.GasTarget}} --gasprice {{.GasPrice}}' >> tomo.sh
 
 ENTRYPOINT ["/bin/sh", "tomo.sh"]
 `
 
 // nodeComposefile is the docker-compose.yml file required to deploy and maintain
-// an Ethereum node (bootnode or miner for now).
+// an Ethereum node (bootnode or staker for now).
 var nodeComposefile = `
 version: '2'
 services:
@@ -66,7 +66,7 @@ services:
       - TOTAL_PEERS={{.TotalPeers}}
       - LIGHT_PEERS={{.LightPeers}}
       - STATS_NAME={{.Ethstats}}
-      - MINER_NAME={{.Etherbase}}
+      - STAKER_NAME={{.Etherbase}}
       - GAS_TARGET={{.GasTarget}}
       - GAS_PRICE={{.GasPrice}}
     logging:
@@ -174,14 +174,14 @@ func (info *nodeInfos) Report() map[string]string {
 		"Ethstats username":        info.ethstats,
 	}
 	if info.gasTarget > 0 {
-		// Miner or signer node
+		// Staker or signer node
 		report["Gas limit (baseline target)"] = fmt.Sprintf("%0.3f MGas", info.gasTarget)
 		report["Gas price (minimum accepted)"] = fmt.Sprintf("%0.3f GWei", info.gasPrice)
 
 		if info.etherbase != "" {
-			// Ethash proof-of-work miner
+			// Ethash proof-of-work staker
 			report["Ethash directory"] = info.ethashdir
-			report["Miner account"] = info.etherbase
+			report["Staker account"] = info.etherbase
 		}
 		if info.keyJSON != "" {
 			// Posv proof-of-stake-voting signer
@@ -252,7 +252,7 @@ func checkNode(client *sshClient, network string, boot bool) (*nodeInfos, error)
 		peersTotal: totalPeers,
 		peersLight: lightPeers,
 		ethstats:   infos.envvars["STATS_NAME"],
-		etherbase:  infos.envvars["MINER_NAME"],
+		etherbase:  infos.envvars["STAKER_NAME"],
 		keyJSON:    keyJSON,
 		keyPass:    keyPass,
 		gasTarget:  gasTarget,

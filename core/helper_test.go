@@ -40,7 +40,7 @@ func (tm *TestManager) IsListening() bool {
 	return false
 }
 
-func (tm *TestManager) IsMining() bool {
+func (tm *TestManager) IsStaking() bool {
 	return false
 }
 

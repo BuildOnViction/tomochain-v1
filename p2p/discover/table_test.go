@@ -362,8 +362,8 @@ func TestTable_Lookup(t *testing.T) {
 }
 
 // This is the test network for the Lookup test.
-// The nodes were obtained by running testnet.mine with a random NodeID as target.
-var lookupTestnet = &preminedTestnet{
+// The nodes were obtained by running testnet.stake with a random NodeID as target.
+var lookupTestnet = &prestakedTestnet{
 	target:    MustHexID("166aea4f556532c6d34e8b740e5d314af7e9ac0ca79833bd751d6b665f12dfd38ec563c363b32f02aef4a80b44fd3def94612d497b99cb5f17fd24de454927ec"),
 	targetSha: common.Hash{0x5c, 0x94, 0x4e, 0xe5, 0x1c, 0x5a, 0xe9, 0xf7, 0x2a, 0x95, 0xec, 0xcb, 0x8a, 0xed, 0x3, 0x74, 0xee, 0xcb, 0x51, 0x19, 0xd7, 0x20, 0xcb, 0xea, 0x68, 0x13, 0xe8, 0xe0, 0xd6, 0xad, 0x92, 0x61},
 	dists: [257][]NodeID{
@@ -556,13 +556,13 @@ var lookupTestnet = &preminedTestnet{
 	},
 }
 
-type preminedTestnet struct {
+type prestakedTestnet struct {
 	target    NodeID
 	targetSha common.Hash // sha3(target)
 	dists     [hashBits + 1][]NodeID
 }
 
-func (tn *preminedTestnet) findnode(toid NodeID, toaddr *net.UDPAddr, target NodeID) ([]*Node, error) {
+func (tn *prestakedTestnet) findnode(toid NodeID, toaddr *net.UDPAddr, target NodeID) ([]*Node, error) {
 	// current log distance is encoded in port number
 	// fmt.Println("findnode query at dist", toaddr.Port)
 	if toaddr.Port == 0 {
@@ -576,13 +576,13 @@ func (tn *preminedTestnet) findnode(toid NodeID, toaddr *net.UDPAddr, target Nod
 	return result, nil
 }
 
-func (*preminedTestnet) close()                                      {}
-func (*preminedTestnet) waitping(from NodeID) error                  { return nil }
-func (*preminedTestnet) ping(toid NodeID, toaddr *net.UDPAddr) error { return nil }
+func (*prestakedTestnet) close()                                      {}
+func (*prestakedTestnet) waitping(from NodeID) error                  { return nil }
+func (*prestakedTestnet) ping(toid NodeID, toaddr *net.UDPAddr) error { return nil }
 
-// mine generates a testnet struct literal with nodes at
+// stake generates a testnet struct literal with nodes at
 // various distances to the given target.
-func (n *preminedTestnet) mine(target NodeID) {
+func (n *prestakedTestnet) stake(target NodeID) {
 	n.target = target
 	n.targetSha = crypto.Keccak256Hash(n.target[:])
 	found := 0
@@ -597,7 +597,7 @@ func (n *preminedTestnet) mine(target NodeID) {
 			found++
 		}
 	}
-	fmt.Println("&preminedTestnet{")
+	fmt.Println("&prestakedTestnet{")
 	fmt.Printf("	target: %#v,\n", n.target)
 	fmt.Printf("	targetSha: %#v,\n", n.targetSha)
 	fmt.Printf("	dists: [%d][]NodeID{\n", len(n.dists))

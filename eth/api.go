@@ -31,7 +31,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/miner"
+	"github.com/ethereum/go-ethereum/masternode"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -49,52 +49,52 @@ func NewPublicEthereumAPI(e *Ethereum) *PublicEthereumAPI {
 	return &PublicEthereumAPI{e}
 }
 
-// Etherbase is the address that mining rewards will be send to
+// Etherbase is the address that staking rewards will be send to
 func (api *PublicEthereumAPI) Etherbase() (common.Address, error) {
 	return api.e.Etherbase()
 }
 
-// Coinbase is the address that mining rewards will be send to (alias for Etherbase)
+// Coinbase is the address that staking rewards will be send to (alias for Etherbase)
 func (api *PublicEthereumAPI) Coinbase() (common.Address, error) {
 	return api.Etherbase()
 }
 
 // Hashrate returns the POW hashrate
 func (api *PublicEthereumAPI) Hashrate() hexutil.Uint64 {
-	return hexutil.Uint64(api.e.Miner().HashRate())
+	return hexutil.Uint64(api.e.Staker().HashRate())
 }
 
-// PublicMinerAPI provides an API to control the miner.
+// PublicStakerAPI provides an API to control the staker.
 // It offers only methods that operate on data that pose no security risk when it is publicly accessible.
-type PublicMinerAPI struct {
+type PublicStakerAPI struct {
 	e     *Ethereum
-	agent *miner.RemoteAgent
+	agent *masternode.RemoteAgent
 }
 
-// NewPublicMinerAPI create a new PublicMinerAPI instance.
-func NewPublicMinerAPI(e *Ethereum) *PublicMinerAPI {
-	agent := miner.NewRemoteAgent(e.BlockChain(), e.Engine())
-	e.Miner().Register(agent)
+// NewPublicStakerAPI create a new PublicStakerAPI instance.
+func NewPublicStakerAPI(e *Ethereum) *PublicStakerAPI {
+	agent := masternode.NewRemoteAgent(e.BlockChain(), e.Engine())
+	e.Staker().Register(agent)
 
-	return &PublicMinerAPI{e, agent}
+	return &PublicStakerAPI{e, agent}
 }
 
-// Mining returns an indication if this node is currently mining.
-func (api *PublicMinerAPI) Mining() bool {
+// Staking returns an indication if this node is currently staking.
+func (api *PublicStakerAPI) Staking() bool {
 	return api.e.IsStaking()
 }
 
-// SubmitWork can be used by external miner to submit their POW solution. It returns an indication if the work was
+// SubmitWork can be used by external staker to submit their POW solution. It returns an indication if the work was
 // accepted. Note, this is not an indication if the provided work was valid!
-func (api *PublicMinerAPI) SubmitWork(nonce types.BlockNonce, solution, digest common.Hash) bool {
+func (api *PublicStakerAPI) SubmitWork(nonce types.BlockNonce, solution, digest common.Hash) bool {
 	return api.agent.SubmitWork(nonce, digest, solution)
 }
 
-// GetWork returns a work package for external miner. The work package consists of 3 strings
+// GetWork returns a work package for external staker. The work package consists of 3 strings
 // result[0], 32 bytes hex encoded current block header pow-hash
 // result[1], 32 bytes hex encoded seed hash used for DAG
 // result[2], 32 bytes hex encoded boundary condition ("target"), 2^256/difficulty
-func (api *PublicMinerAPI) GetWork() ([3]string, error) {
+func (api *PublicStakerAPI) GetWork() ([3]string, error) {
 	if !api.e.IsStaking() {
 		if err := api.e.StartStaking(false); err != nil {
 			return [3]string{}, err
@@ -102,49 +102,49 @@ func (api *PublicMinerAPI) GetWork() ([3]string, error) {
 	}
 	work, err := api.agent.GetWork()
 	if err != nil {
-		return work, fmt.Errorf("mining not ready: %v", err)
+		return work, fmt.Errorf("staking not ready: %v", err)
 	}
 	return work, nil
 }
 
-// SubmitHashrate can be used for remote miners to submit their hash rate. This enables the node to report the combined
-// hash rate of all miners which submit work through this node. It accepts the miner hash rate and an identifier which
+// SubmitHashrate can be used for remote stakers to submit their hash rate. This enables the node to report the combined
+// hash rate of all stakers which submit work through this node. It accepts the staker hash rate and an identifier which
 // must be unique between nodes.
-func (api *PublicMinerAPI) SubmitHashrate(hashrate hexutil.Uint64, id common.Hash) bool {
+func (api *PublicStakerAPI) SubmitHashrate(hashrate hexutil.Uint64, id common.Hash) bool {
 	api.agent.SubmitHashrate(id, uint64(hashrate))
 	return true
 }
 
-// PrivateMinerAPI provides private RPC methods to control the miner.
+// PrivateStakerAPI provides private RPC methods to control the staker.
 // These methods can be abused by external users and must be considered insecure for use by untrusted users.
-type PrivateMinerAPI struct {
+type PrivateStakerAPI struct {
 	e *Ethereum
 }
 
-// NewPrivateMinerAPI create a new RPC service which controls the miner of this node.
-func NewPrivateMinerAPI(e *Ethereum) *PrivateMinerAPI {
-	return &PrivateMinerAPI{e: e}
+// NewPrivateStakerAPI create a new RPC service which controls the staker of this node.
+func NewPrivateStakerAPI(e *Ethereum) *PrivateStakerAPI {
+	return &PrivateStakerAPI{e: e}
 }
 
-// Start the miner with the given number of threads. If threads is nil the number
+// Start the staker with the given number of threads. If threads is nil the number
 // of workers started is equal to the number of logical CPUs that are usable by
-// this process. If mining is already running, this method adjust the number of
+// this process. If staking is already running, this method adjust the number of
 // threads allowed to use.
-func (api *PrivateMinerAPI) Start(threads *int) error {
+func (api *PrivateStakerAPI) Start(threads *int) error {
 	// Set the number of threads if the seal engine supports it
 	if threads == nil {
 		threads = new(int)
 	} else if *threads == 0 {
-		*threads = -1 // Disable the miner from within
+		*threads = -1 // Disable the staker from within
 	}
 	type threaded interface {
 		SetThreads(threads int)
 	}
 	if th, ok := api.e.engine.(threaded); ok {
-		log.Info("Updated mining threads", "threads", *threads)
+		log.Info("Updated staking threads", "threads", *threads)
 		th.SetThreads(*threads)
 	}
-	// Start the miner and return
+	// Start the staker and return
 	if !api.e.IsStaking() {
 		// Propagate the initial price point to the transaction pool
 		api.e.lock.RLock()
@@ -157,8 +157,8 @@ func (api *PrivateMinerAPI) Start(threads *int) error {
 	return nil
 }
 
-// Stop the miner
-func (api *PrivateMinerAPI) Stop() bool {
+// Stop the staker
+func (api *PrivateStakerAPI) Stop() bool {
 	type threaded interface {
 		SetThreads(threads int)
 	}
@@ -169,16 +169,16 @@ func (api *PrivateMinerAPI) Stop() bool {
 	return true
 }
 
-// SetExtra sets the extra data string that is included when this miner mines a block.
-func (api *PrivateMinerAPI) SetExtra(extra string) (bool, error) {
-	if err := api.e.Miner().SetExtra([]byte(extra)); err != nil {
+// SetExtra sets the extra data string that is included when this staker stakes a block.
+func (api *PrivateStakerAPI) SetExtra(extra string) (bool, error) {
+	if err := api.e.Staker().SetExtra([]byte(extra)); err != nil {
 		return false, err
 	}
 	return true, nil
 }
 
-// SetGasPrice sets the minimum accepted gas price for the miner.
-func (api *PrivateMinerAPI) SetGasPrice(gasPrice hexutil.Big) bool {
+// SetGasPrice sets the minimum accepted gas price for the staker.
+func (api *PrivateStakerAPI) SetGasPrice(gasPrice hexutil.Big) bool {
 	api.e.lock.Lock()
 	api.e.gasPrice = (*big.Int)(&gasPrice)
 	api.e.lock.Unlock()
@@ -187,15 +187,15 @@ func (api *PrivateMinerAPI) SetGasPrice(gasPrice hexutil.Big) bool {
 	return true
 }
 
-// SetEtherbase sets the etherbase of the miner
-func (api *PrivateMinerAPI) SetEtherbase(etherbase common.Address) bool {
+// SetEtherbase sets the etherbase of the staker
+func (api *PrivateStakerAPI) SetEtherbase(etherbase common.Address) bool {
 	api.e.SetEtherbase(etherbase)
 	return true
 }
 
-// GetHashrate returns the current hashrate of the miner.
-func (api *PrivateMinerAPI) GetHashrate() uint64 {
-	return uint64(api.e.miner.HashRate())
+// GetHashrate returns the current hashrate of the staker.
+func (api *PrivateStakerAPI) GetHashrate() uint64 {
+	return uint64(api.e.staker.HashRate())
 }
 
 // PrivateAdminAPI is the collection of Ethereum full node-related APIs
@@ -308,8 +308,8 @@ func (api *PublicDebugAPI) DumpBlock(blockNr rpc.BlockNumber) (state.Dump, error
 	if blockNr == rpc.PendingBlockNumber {
 		// If we're dumping the pending state, we need to request
 		// both the pending block as well as the pending state from
-		// the miner and operate on those
-		_, stateDb := api.eth.miner.Pending()
+		// the staker and operate on those
+		_, stateDb := api.eth.staker.Pending()
 		return stateDb.RawDump(), nil
 	}
 	var block *types.Block

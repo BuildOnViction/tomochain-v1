@@ -472,7 +472,7 @@ type blockStats struct {
 	Hash       common.Hash    `json:"hash"`
 	ParentHash common.Hash    `json:"parentHash"`
 	Timestamp  *big.Int       `json:"timestamp"`
-	Miner      common.Address `json:"miner"`
+	Staker     common.Address `json:"staker"`
 	GasUsed    uint64         `json:"gasUsed"`
 	GasLimit   uint64         `json:"gasLimit"`
 	Diff       string         `json:"difficulty"`
@@ -558,7 +558,7 @@ func (s *Service) assembleBlockStats(block *types.Block) *blockStats {
 		Hash:       header.Hash(),
 		ParentHash: header.ParentHash,
 		Timestamp:  header.Time,
-		Miner:      author,
+		Staker:     author,
 		GasUsed:    header.GasUsed,
 		GasLimit:   header.GasLimit,
 		Diff:       header.Difficulty.String(),
@@ -665,7 +665,7 @@ func (s *Service) reportPending(conn *websocket.Conn) error {
 type nodeStats struct {
 	Active   bool `json:"active"`
 	Syncing  bool `json:"syncing"`
-	Mining   bool `json:"mining"`
+	Staking  bool `json:"staking"`
 	Hashrate int  `json:"hashrate"`
 	Peers    int  `json:"peers"`
 	GasPrice int  `json:"gasPrice"`
@@ -673,18 +673,18 @@ type nodeStats struct {
 }
 
 // reportPending retrieves various stats about the node at the networking and
-// mining layer and reports it to the stats server.
+// staking layer and reports it to the stats server.
 func (s *Service) reportStats(conn *websocket.Conn) error {
-	// Gather the syncing and mining infos from the local miner instance
+	// Gather the syncing and staking infos from the local staker instance
 	var (
-		mining   bool
+		staking  bool
 		hashrate int
 		syncing  bool
 		gasprice int
 	)
 	if s.eth != nil {
-		mining = s.eth.Miner().Mining()
-		hashrate = int(s.eth.Miner().HashRate())
+		staking = s.eth.Staker().Staking()
+		hashrate = int(s.eth.Staker().HashRate())
 
 		sync := s.eth.Downloader().Progress()
 		syncing = s.eth.BlockChain().CurrentHeader().Number.Uint64() >= sync.HighestBlock
@@ -702,7 +702,7 @@ func (s *Service) reportStats(conn *websocket.Conn) error {
 		"id": s.node,
 		"stats": &nodeStats{
 			Active:   true,
-			Mining:   mining,
+			Staking:  staking,
 			Hashrate: hashrate,
 			Peers:    s.server.PeerCount(),
 			GasPrice: gasprice,

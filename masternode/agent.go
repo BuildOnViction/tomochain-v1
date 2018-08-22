@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
-package miner
+package masternode
 
 import (
 	"sync"
@@ -36,24 +36,24 @@ type CpuAgent struct {
 	chain  consensus.ChainReader
 	engine consensus.Engine
 
-	isMining int32 // isMining indicates whether the agent is currently mining
+	isStaking int32 // isStaking indicates whether the agent is currently staking
 }
 
 func NewCpuAgent(chain consensus.ChainReader, engine consensus.Engine) *CpuAgent {
-	miner := &CpuAgent{
+	staker := &CpuAgent{
 		chain:  chain,
 		engine: engine,
 		stop:   make(chan struct{}, 1),
 		workCh: make(chan *Work, 1),
 	}
-	return miner
+	return staker
 }
 
 func (self *CpuAgent) Work() chan<- *Work            { return self.workCh }
 func (self *CpuAgent) SetReturnCh(ch chan<- *Result) { self.returnCh = ch }
 
 func (self *CpuAgent) Stop() {
-	if !atomic.CompareAndSwapInt32(&self.isMining, 1, 0) {
+	if !atomic.CompareAndSwapInt32(&self.isStaking, 1, 0) {
 		return // agent already stopped
 	}
 	self.stop <- struct{}{}
@@ -69,7 +69,7 @@ done:
 }
 
 func (self *CpuAgent) Start() {
-	if !atomic.CompareAndSwapInt32(&self.isMining, 0, 1) {
+	if !atomic.CompareAndSwapInt32(&self.isStaking, 0, 1) {
 		return // agent already started
 	}
 	go self.update()
@@ -85,7 +85,7 @@ out:
 				close(self.quitCurrentOp)
 			}
 			self.quitCurrentOp = make(chan struct{})
-			go self.mine(work, self.quitCurrentOp)
+			go self.stake(work, self.quitCurrentOp)
 			self.mu.Unlock()
 		case <-self.stop:
 			self.mu.Lock()
@@ -99,7 +99,7 @@ out:
 	}
 }
 
-func (self *CpuAgent) mine(work *Work, stop <-chan struct{}) {
+func (self *CpuAgent) stake(work *Work, stop <-chan struct{}) {
 	if result, err := self.engine.Seal(self.chain, work.Block, stop); result != nil {
 		log.Info("Successfully sealed new block", "number", result.Number(), "hash", result.Hash())
 		self.returnCh <- &Result{work, result}

@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
-package miner
+package masternode
 
 import (
 	"errors"
@@ -118,7 +118,7 @@ func (a *RemoteAgent) GetWork() ([3]string, error) {
 		res[0] = block.HashNoNonce().Hex()
 		seedHash := ethash.SeedHash(block.NumberU64())
 		res[1] = common.BytesToHash(seedHash).Hex()
-		// Calculate the "target" to be returned to the external miner
+		// Calculate the "target" to be returned to the external masternode
 		n := big.NewInt(1)
 		n.Lsh(n, 255)
 		n.Div(n, block.Difficulty())
@@ -155,15 +155,15 @@ func (a *RemoteAgent) SubmitWork(nonce types.BlockNonce, mixDigest, hash common.
 	}
 	block := work.Block.WithSeal(result)
 
-	// Solutions seems to be valid, return to the miner and notify acceptance
+	// Solutions seems to be valid, return to the masternode and notify acceptance
 	a.returnCh <- &Result{work, block}
 	delete(a.work, hash)
 
 	return true
 }
 
-// loop monitors mining events on the work and quit channels, updating the internal
-// state of the remote miner until a termination is requested.
+// loop monitors staking events on the work and quit channels, updating the internal
+// state of the remote masternode until a termination is requested.
 //
 // Note, the reason the work and quit channels are passed as parameters is because
 // RemoteAgent.Start() constantly recreates these channels, so the loop code cannot

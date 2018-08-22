@@ -70,10 +70,10 @@ func (w *wizard) deployNode(boot bool) {
 	if w.conf.Genesis.Config.Ethash != nil && !boot {
 		fmt.Println()
 		if infos.ethashdir == "" {
-			fmt.Printf("Where should the ethash mining DAGs be stored on the remote machine?\n")
+			fmt.Printf("Where should the ethash staking DAGs be stored on the remote machine?\n")
 			infos.ethashdir = w.readString()
 		} else {
-			fmt.Printf("Where should the ethash mining DAGs be stored on the remote machine? (default = %s)\n", infos.ethashdir)
+			fmt.Printf("Where should the ethash staking DAGs be stored on the remote machine? (default = %s)\n", infos.ethashdir)
 			infos.ethashdir = w.readDefaultString(infos.ethashdir)
 		}
 	}
@@ -101,13 +101,13 @@ func (w *wizard) deployNode(boot bool) {
 		fmt.Printf("What should the node be called on the stats page? (default = %s)\n", infos.ethstats)
 		infos.ethstats = w.readDefaultString(infos.ethstats) + ":" + w.conf.ethstats
 	}
-	// If the node is a miner/signer, load up needed credentials
+	// If the node is a staker/signer, load up needed credentials
 	if !boot {
 		if w.conf.Genesis.Config.Ethash != nil {
-			// Ethash based miners only need an etherbase to mine against
+			// Ethash based stakers only need an etherbase to stake against
 			fmt.Println()
 			if infos.etherbase == "" {
-				fmt.Printf("What address should the miner user?\n")
+				fmt.Printf("What address should the staker user?\n")
 				for {
 					if address := w.readAddress(); address != nil {
 						infos.etherbase = address.Hex()
@@ -115,7 +115,7 @@ func (w *wizard) deployNode(boot bool) {
 					}
 				}
 			} else {
-				fmt.Printf("What address should the miner user? (default = %s)\n", infos.etherbase)
+				fmt.Printf("What address should the staker user? (default = %s)\n", infos.etherbase)
 				infos.etherbase = w.readDefaultAddress(common.HexToAddress(infos.etherbase)).Hex()
 			}
 		} else if w.conf.Genesis.Config.Posv != nil {

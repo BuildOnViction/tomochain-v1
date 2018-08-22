@@ -2,7 +2,7 @@
   "context": {
     "difficulty": "3502894804",
     "gasLimit": "4722976",
-    "miner": "0x1585936b53834b021f68cc13eeefdec2efc8e724",
+    "stake": "0x1585936b53834b021f68cc13eeefdec2efc8e724",
     "number": "2289806",
     "timestamp": "1513601314"
   },
@@ -47,7 +47,7 @@
     "extraData": "0x4554482e45544846414e532e4f52472d4641313738394444",
     "gasLimit": "4727564",
     "hash": "0x609948ac3bd3c00b7736b933248891d6c901ee28f066241bddb28f4e00a9f440",
-    "miner": "0xbbf5029fd710d227630c8b7d338051b8e76d50b3",
+    "stake": "0xbbf5029fd710d227630c8b7d338051b8e76d50b3",
     "mixHash": "0xb131e4507c93c7377de00e7c271bf409ec7492767142ff0f45c882f8068c2ada",
     "nonce": "0x4eb12e19c16d43da",
     "number": "2289805",

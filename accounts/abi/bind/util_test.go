@@ -61,24 +61,24 @@ func TestWaitDeployed(t *testing.T) {
 		tx := types.NewContractCreation(0, big.NewInt(0), test.gas, big.NewInt(1), common.FromHex(test.code))
 		tx, _ = types.SignTx(tx, types.HomesteadSigner{}, testKey)
 
-		// Wait for it to get mined in the background.
+		// Wait for it to get staked in the background.
 		var (
 			err     error
 			address common.Address
-			mined   = make(chan struct{})
+			staked  = make(chan struct{})
 			ctx     = context.Background()
 		)
 		go func() {
 			address, err = bind.WaitDeployed(ctx, backend, tx)
-			close(mined)
+			close(staked)
 		}()
 
-		// Send and mine the transaction.
+		// Send and stake the transaction.
 		backend.SendTransaction(ctx, tx)
 		backend.Commit()
 
 		select {
-		case <-mined:
+		case <-staked:
 			if err != test.wantErr {
 				t.Errorf("test %q: error mismatch: got %q, want %q", name, err, test.wantErr)
 			}

@@ -282,8 +282,8 @@ type FilterCriteria struct {
 // used to fetch logs that are already stored in the state.
 //
 // Default criteria for the from and to block are "latest".
-// Using "latest" as block number will return logs for mined blocks.
-// Using "pending" as block number returns logs for not yet mined (pending) blocks.
+// Using "latest" as block number will return logs for staked blocks.
+// Using "pending" as block number returns logs for not yet staked (pending) blocks.
 // In case logs are removed (chain reorg) previously returned logs are returned
 // again but with the removed property set to true.
 //

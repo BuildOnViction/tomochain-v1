@@ -69,7 +69,7 @@ func calcCacheSize(epoch int) uint64 {
 	return size
 }
 
-// datasetSize returns the size of the ethash mining dataset that belongs to a certain
+// datasetSize returns the size of the ethash staking dataset that belongs to a certain
 // block number.
 func datasetSize(block uint64) uint64 {
 	epoch := int(block / epochLength)
@@ -105,7 +105,7 @@ func makeHasher(h hash.Hash) hasher {
 	}
 }
 
-// seedHash is the seed to use for generating a verification cache and the mining
+// seedHash is the seed to use for generating a verification cache and the staking
 // dataset.
 func seedHash(block uint64) []byte {
 	seed := make([]byte, 32)
@@ -260,7 +260,7 @@ func generateDatasetItem(cache []uint32, index uint32, keccak512 hasher) []byte 
 	return mix
 }
 
-// generateDataset generates the entire ethash dataset for mining.
+// generateDataset generates the entire ethash dataset for staking.
 // This method places the result into dest in machine byte order.
 func generateDataset(dest []uint32, epoch uint64, cache []uint32) {
 	// Print some debug logs to allow analysis on low end devices

@@ -5466,8 +5466,8 @@ var properties = function () {
             getter: 'eth_coinbase'
         }),
         new Property({
-            name: 'mining',
-            getter: 'eth_mining'
+            name: 'staking',
+            getter: 'eth_staking'
         }),
         new Property({
             name: 'hashrate',

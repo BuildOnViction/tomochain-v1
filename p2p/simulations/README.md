@@ -120,7 +120,7 @@ with a `Step` which has the following fields:
 
 As a concrete example, consider a simulated network of Ethereum nodes. An
 `Action` could be the sending of a transaction, `Expect` it being included in
-a block, and `Trigger` a check for every block that is mined.
+a block, and `Trigger` a check for every block that is staked.
 
 On return, the `Simulation.Run` method returns a `StepResult` which can be used
 to determine if all nodes met the expectation, how long it took them to meet

@@ -64,8 +64,8 @@ func TestNetwork_Lookup(t *testing.T) {
 }
 
 // This is the test network for the Lookup test.
-// The nodes were obtained by running testnet.mine with a random NodeID as target.
-var lookupTestnet = &preminedTestnet{
+// The nodes were obtained by running testnet.stake with a random NodeID as target.
+var lookupTestnet = &prestakedTestnet{
 	target:    MustHexID("166aea4f556532c6d34e8b740e5d314af7e9ac0ca79833bd751d6b665f12dfd38ec563c363b32f02aef4a80b44fd3def94612d497b99cb5f17fd24de454927ec"),
 	targetSha: common.Hash{0x5c, 0x94, 0x4e, 0xe5, 0x1c, 0x5a, 0xe9, 0xf7, 0x2a, 0x95, 0xec, 0xcb, 0x8a, 0xed, 0x3, 0x74, 0xee, 0xcb, 0x51, 0x19, 0xd7, 0x20, 0xcb, 0xea, 0x68, 0x13, 0xe8, 0xe0, 0xd6, 0xad, 0x92, 0x61},
 	dists: [257][]NodeID{
@@ -258,18 +258,18 @@ var lookupTestnet = &preminedTestnet{
 	},
 }
 
-type preminedTestnet struct {
+type prestakedTestnet struct {
 	target    NodeID
 	targetSha common.Hash // sha3(target)
 	dists     [hashBits + 1][]NodeID
 	net       *Network
 }
 
-func (tn *preminedTestnet) sendFindnode(to *Node, target NodeID) {
+func (tn *prestakedTestnet) sendFindnode(to *Node, target NodeID) {
 	panic("sendFindnode called")
 }
 
-func (tn *preminedTestnet) sendFindnodeHash(to *Node, target common.Hash) {
+func (tn *prestakedTestnet) sendFindnodeHash(to *Node, target common.Hash) {
 	// current log distance is encoded in port number
 	// fmt.Println("findnode query at dist", toaddr.Port)
 	if to.UDP <= lowPort {
@@ -283,12 +283,12 @@ func (tn *preminedTestnet) sendFindnodeHash(to *Node, target common.Hash) {
 	injectResponse(tn.net, to, neighborsPacket, &neighbors{Nodes: result})
 }
 
-func (tn *preminedTestnet) sendPing(to *Node, addr *net.UDPAddr, topics []Topic) []byte {
+func (tn *prestakedTestnet) sendPing(to *Node, addr *net.UDPAddr, topics []Topic) []byte {
 	injectResponse(tn.net, to, pongPacket, &pong{ReplyTok: []byte{1}})
 	return []byte{1}
 }
 
-func (tn *preminedTestnet) send(to *Node, ptype nodeEvent, data interface{}) (hash []byte) {
+func (tn *prestakedTestnet) send(to *Node, ptype nodeEvent, data interface{}) (hash []byte) {
 	switch ptype {
 	case pingPacket:
 		injectResponse(tn.net, to, pongPacket, &pong{ReplyTok: []byte{1}})
@@ -312,31 +312,31 @@ func (tn *preminedTestnet) send(to *Node, ptype nodeEvent, data interface{}) (ha
 	return []byte{2}
 }
 
-func (tn *preminedTestnet) sendNeighbours(to *Node, nodes []*Node) {
+func (tn *prestakedTestnet) sendNeighbours(to *Node, nodes []*Node) {
 	panic("sendNeighbours called")
 }
 
-func (tn *preminedTestnet) sendTopicQuery(to *Node, topic Topic) {
+func (tn *prestakedTestnet) sendTopicQuery(to *Node, topic Topic) {
 	panic("sendTopicQuery called")
 }
 
-func (tn *preminedTestnet) sendTopicNodes(to *Node, queryHash common.Hash, nodes []*Node) {
+func (tn *prestakedTestnet) sendTopicNodes(to *Node, queryHash common.Hash, nodes []*Node) {
 	panic("sendTopicNodes called")
 }
 
-func (tn *preminedTestnet) sendTopicRegister(to *Node, topics []Topic, idx int, pong []byte) {
+func (tn *prestakedTestnet) sendTopicRegister(to *Node, topics []Topic, idx int, pong []byte) {
 	panic("sendTopicRegister called")
 }
 
-func (*preminedTestnet) Close() {}
+func (*prestakedTestnet) Close() {}
 
-func (*preminedTestnet) localAddr() *net.UDPAddr {
+func (*prestakedTestnet) localAddr() *net.UDPAddr {
 	return &net.UDPAddr{IP: net.ParseIP("10.0.1.1"), Port: 40000}
 }
 
-// mine generates a testnet struct literal with nodes at
+// stake generates a testnet struct literal with nodes at
 // various distances to the given target.
-func (n *preminedTestnet) mine(target NodeID) {
+func (n *prestakedTestnet) stake(target NodeID) {
 	n.target = target
 	n.targetSha = crypto.Keccak256Hash(n.target[:])
 	found := 0
@@ -351,7 +351,7 @@ func (n *preminedTestnet) mine(target NodeID) {
 			found++
 		}
 	}
-	fmt.Println("&preminedTestnet{")
+	fmt.Println("&prestakedTestnet{")
 	fmt.Printf("	target: %#v,\n", n.target)
 	fmt.Printf("	targetSha: %#v,\n", n.targetSha)
 	fmt.Printf("	dists: [%d][]NodeID{\n", len(n.dists))

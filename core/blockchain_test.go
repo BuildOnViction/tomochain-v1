@@ -582,7 +582,7 @@ func TestFastVsFullChains(t *testing.T) {
 	blocks, receipts := GenerateChain(gspec.Config, genesis, ethash.NewFaker(), gendb, 1024, func(i int, block *BlockGen) {
 		block.SetCoinbase(common.Address{0x00})
 
-		// If the block number is multiple of 3, send a few bonus transactions to the miner
+		// If the block number is multiple of 3, send a few bonus transactions to the masternode
 		if i%3 == 2 {
 			for j := 0; j < i%4+1; j++ {
 				tx, err := types.SignTx(types.NewTransaction(block.TxNonce(address), common.Address{0x00}, big.NewInt(1000), params.TxGas, nil, nil), signer, key)
