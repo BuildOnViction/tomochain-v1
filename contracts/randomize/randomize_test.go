@@ -29,14 +29,16 @@ import (
 )
 
 var (
-	key, _ = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
-	addr   = crypto.PubkeyToAddress(key.PublicKey)
-	byte0  = make([][32]byte, 2)
+	epocNumber = int64(12)
+	key, _     = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+	addr       = crypto.PubkeyToAddress(key.PublicKey)
+	byte0      = make([][32]byte, epocNumber)
 )
 
 func TestRandomize(t *testing.T) {
-	contractBackend := backends.NewSimulatedBackend(core.GenesisAlloc{addr: {Balance: big.NewInt(1000000000)}})
+	contractBackend := backends.NewSimulatedBackend(core.GenesisAlloc{addr: {Balance: big.NewInt(100000000000000)}})
 	transactOpts := bind.NewKeyedTransactor(key)
+	transactOpts.GasLimit = 1000000
 
 	randomizeAddress, randomize, err := DeployRandomize(transactOpts, contractBackend, big.NewInt(2))
 	t.Log("contract address", randomizeAddress.String())
@@ -55,10 +57,9 @@ func TestRandomize(t *testing.T) {
 		return true
 	}
 	contractBackend.ForEachStorageAt(ctx, randomizeAddress, nil, f)
-
 	s, err := randomize.SetSecret(byte0)
 	if err != nil {
-		t.Fatalf("can't get secret: %v", err)
+		t.Fatalf("can't set secret: %v", err)
 	}
 	t.Log("tx data", s)
 	contractBackend.Commit()
