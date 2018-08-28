@@ -350,8 +350,8 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 					}
 				case <-core.M1Ch:
 					err := ethereum.BlockChain().UpdateM1()
-					if(err !=nil){
-						log.Error("Error when update M1",err)
+					if err != nil {
+						log.Error("Error when update M1", err)
 					}
 				}
 			}
