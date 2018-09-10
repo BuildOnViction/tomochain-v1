@@ -27,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/cmd/utils"
+	"github.com/ethereum/go-ethereum/consensus/posv"
 	"github.com/ethereum/go-ethereum/console"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/eth"
@@ -213,8 +214,8 @@ func main() {
 // It creates a default node based on the command line arguments and runs it in
 // blocking mode, waiting for it to be shut down.
 func tomo(ctx *cli.Context) error {
-	node := makeFullNode(ctx)
-	startNode(ctx, node)
+	node, cfg := makeFullNode(ctx)
+	startNode(ctx, node, cfg)
 	node.Wait()
 	return nil
 }
@@ -222,18 +223,24 @@ func tomo(ctx *cli.Context) error {
 // startNode boots up the system node and all registered protocols, after which
 // it unlocks any requested accounts, and starts the RPC/IPC interfaces and the
 // miner.
-func startNode(ctx *cli.Context, stack *node.Node) {
+func startNode(ctx *cli.Context, stack *node.Node, cfg tomoConfig) {
 	// Start up the node itself
 	utils.StartNode(stack)
 
 	// Unlock any account specifically requested
 	ks := stack.AccountManager().Backends(keystore.KeyStoreType)[0].(*keystore.KeyStore)
 
-	passwords := utils.MakePasswordList(ctx)
-	unlocks := strings.Split(ctx.GlobalString(utils.UnlockedAccountFlag.Name), ",")
-	for i, account := range unlocks {
+	if ctx.GlobalIsSet(utils.UnlockedAccountFlag.Name) {
+		cfg.Account.Unlocks = strings.Split(ctx.GlobalString(utils.UnlockedAccountFlag.Name), ",")
+	}
+
+	if ctx.GlobalIsSet(utils.PasswordFileFlag.Name) {
+		cfg.Account.Passwords = utils.MakePasswordList(ctx)
+	}
+
+	for i, account := range cfg.Account.Unlocks {
 		if trimmed := strings.TrimSpace(account); trimmed != "" {
-			unlockAccount(ctx, ks, trimmed, i, passwords)
+			unlockAccount(ctx, ks, trimmed, i, cfg.Account.Passwords)
 		}
 	}
 	// Register wallet event handlers to open and auto-derive wallets
@@ -278,15 +285,16 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 		}
 	}()
 	// Start auxiliary services if enabled
-	if ctx.GlobalBool(utils.StakingEnabledFlag.Name) || ctx.GlobalBool(utils.DeveloperFlag.Name) {
-		// Mining only makes sense if a full Ethereum node is running
-		if ctx.GlobalBool(utils.LightModeFlag.Name) || ctx.GlobalString(utils.SyncModeFlag.Name) == "light" {
-			utils.Fatalf("Light clients do not support staking")
-		}
-		var ethereum *eth.Ethereum
-		if err := stack.Service(&ethereum); err != nil {
-			utils.Fatalf("Ethereum service not running: %v", err)
-		}
+
+	// Mining only makes sense if a full Ethereum node is running
+	if ctx.GlobalBool(utils.LightModeFlag.Name) || ctx.GlobalString(utils.SyncModeFlag.Name) == "light" {
+		utils.Fatalf("Light clients do not support staking")
+	}
+	var ethereum *eth.Ethereum
+	if err := stack.Service(&ethereum); err != nil {
+		utils.Fatalf("Ethereum service not running: %v", err)
+	}
+	if _, ok := ethereum.Engine().(*posv.Posv); ok {
 		go func() {
 			started := false
 			ok, err := ethereum.ValidateStaker()
@@ -305,7 +313,7 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 					}
 				}
 				// Set the gas price to the limits from the CLI and start mining
-				ethereum.TxPool().SetGasPrice(utils.GlobalBig(ctx, utils.GasPriceFlag.Name))
+				ethereum.TxPool().SetGasPrice(cfg.Eth.GasPrice)
 				if err := ethereum.StartStaking(true); err != nil {
 					utils.Fatalf("Failed to start staking: %v", err)
 				}
@@ -313,7 +321,6 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 				log.Info("Enabled staking node!!!")
 			}
 			defer close(core.CheckpointCh)
-			defer close(core.M1Ch)
 			for {
 				select {
 				case <-core.CheckpointCh:
@@ -341,17 +348,12 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 							}
 						}
 						// Set the gas price to the limits from the CLI and start mining
-						ethereum.TxPool().SetGasPrice(utils.GlobalBig(ctx, utils.GasPriceFlag.Name))
+						ethereum.TxPool().SetGasPrice(cfg.Eth.GasPrice)
 						if err := ethereum.StartStaking(true); err != nil {
 							utils.Fatalf("Failed to start staking: %v", err)
 						}
 						started = true
 						log.Info("Enabled staking node!!!")
-					}
-				case <-core.M1Ch:
-					err := ethereum.BlockChain().UpdateM1()
-					if err != nil {
-						log.Error("Error when update M1", err)
 					}
 				}
 			}

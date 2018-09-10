@@ -25,15 +25,18 @@ import (
 	"reflect"
 	"unicode"
 
-	cli "gopkg.in/urfave/cli.v1"
+	"gopkg.in/urfave/cli.v1"
 
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/dashboard"
 	"github.com/ethereum/go-ethereum/eth"
+	"github.com/ethereum/go-ethereum/internal/debug"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/params"
 	whisper "github.com/ethereum/go-ethereum/whisper/whisperv6"
 	"github.com/naoina/toml"
+	"strings"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 var (
@@ -71,15 +74,30 @@ var tomlSettings = toml.Config{
 }
 
 type ethstatsConfig struct {
-	URL string `toml:",omitempty"`
+	URL string
+}
+
+type account struct {
+	Unlocks   []string
+	Passwords []string
+}
+
+type Bootnodes struct {
+	Mainnet []string
+	Testnet []string
 }
 
 type tomoConfig struct {
-	Eth       eth.Config
-	Shh       whisper.Config
-	Node      node.Config
-	Ethstats  ethstatsConfig
-	Dashboard dashboard.Config
+	Eth         eth.Config
+	Shh         whisper.Config
+	Node        node.Config
+	Ethstats    ethstatsConfig
+	Dashboard   dashboard.Config
+	Account     account
+	StakeEnable bool
+	Bootnodes   Bootnodes
+	Verbosity   int
+	NAT         string
 }
 
 func loadConfig(file string, cfg *tomoConfig) error {
@@ -88,7 +106,6 @@ func loadConfig(file string, cfg *tomoConfig) error {
 		return err
 	}
 	defer f.Close()
-
 	err = tomlSettings.NewDecoder(bufio.NewReader(f)).Decode(cfg)
 	// Add file name to errors that have a line number.
 	if _, ok := err.(*toml.LineError); ok {
@@ -110,18 +127,44 @@ func defaultNodeConfig() node.Config {
 func makeConfigNode(ctx *cli.Context) (*node.Node, tomoConfig) {
 	// Load defaults.
 	cfg := tomoConfig{
-		Eth:       eth.DefaultConfig,
-		Shh:       whisper.DefaultConfig,
-		Node:      defaultNodeConfig(),
-		Dashboard: dashboard.DefaultConfig,
+		Eth:         eth.DefaultConfig,
+		Shh:         whisper.DefaultConfig,
+		Node:        defaultNodeConfig(),
+		Dashboard:   dashboard.DefaultConfig,
+		StakeEnable: true,
+		Verbosity:   3,
+		NAT:         "",
 	}
-
 	// Load config file.
 	if file := ctx.GlobalString(configFileFlag.Name); file != "" {
 		if err := loadConfig(file, &cfg); err != nil {
 			utils.Fatalf("%v", err)
 		}
 	}
+	if ctx.GlobalIsSet(utils.StakingEnabledFlag.Name) {
+		cfg.StakeEnable = ctx.GlobalBool(utils.StakingEnabledFlag.Name)
+	}
+	if !ctx.GlobalIsSet(debug.VerbosityFlag.Name) {
+		debug.Glogger.Verbosity(log.Lvl(cfg.Verbosity))
+	}
+
+	if !ctx.GlobalIsSet(utils.NATFlag.Name) && cfg.NAT != "" {
+		ctx.Set(utils.NATFlag.Name, cfg.NAT)
+	}
+
+	// read passwords from enviroment
+	passwords := []string{}
+	for _, env := range cfg.Account.Passwords {
+		if trimmed := strings.TrimSpace(env); trimmed != "" {
+			value := os.Getenv(trimmed)
+			for _, info := range strings.Split(value, ",") {
+				if trimmed2 := strings.TrimSpace(info); trimmed2 != "" {
+					passwords = append(passwords, trimmed2)
+				}
+			}
+		}
+	}
+	cfg.Account.Passwords = passwords
 
 	// Apply flags.
 	utils.SetNodeConfig(ctx, &cfg.Node)
@@ -140,6 +183,19 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, tomoConfig) {
 	return stack, cfg
 }
 
+func applyValues(values []string, params *[]string) {
+	data := []string{}
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			data = append(data, trimmed)
+		}
+	}
+	if len(data) > 0 {
+		*params = data
+	}
+
+}
+
 // enableWhisper returns true in case one of the whisper flags is set.
 func enableWhisper(ctx *cli.Context) bool {
 	for _, flag := range whisperFlags {
@@ -150,7 +206,7 @@ func enableWhisper(ctx *cli.Context) bool {
 	return false
 }
 
-func makeFullNode(ctx *cli.Context) *node.Node {
+func makeFullNode(ctx *cli.Context) (*node.Node, tomoConfig) {
 	stack, cfg := makeConfigNode(ctx)
 
 	utils.RegisterEthService(stack, &cfg.Eth)
@@ -175,7 +231,7 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 	if cfg.Ethstats.URL != "" {
 		utils.RegisterEthStatsService(stack, cfg.Ethstats.URL)
 	}
-	return stack
+	return stack, cfg
 }
 
 // dumpConfig is the dumpconfig command.
