@@ -304,10 +304,26 @@ func (pm *ProtocolManager) handle(p *peer) error {
 			}
 		}()
 	}
+	// create a go rountine process queue transaction transfer from peer
+	errorHandleMsg := false
+	go func() {
+		for {
+			tx := p.GetTransactionFromQueue()
+			if tx != nil {
+				pm.txpool.AddRemotes(types.Transactions{tx})
+			} else {
+				if errorHandleMsg {
+					return
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+	}()
 	// main loop. handle incoming messages.
 	for {
 		if err := pm.handleMsg(p); err != nil {
 			p.Log().Debug("Ethereum message handling failed", "err", err)
+			errorHandleMsg = true
 			return err
 		}
 	}
@@ -670,8 +686,8 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 				return errResp(ErrDecode, "transaction %d is nil", i)
 			}
 			p.MarkTransaction(tx.Hash())
+			p.AddQueueTransaction(tx)
 		}
-		pm.txpool.AddRemotes(txs)
 
 	default:
 		return errResp(ErrInvalidMsgCode, "%v", msg.Code)

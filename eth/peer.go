@@ -38,6 +38,7 @@ var (
 
 const (
 	maxKnownTxs      = 32768 // Maximum transactions hashes to keep in the known list (prevent DOS)
+	maxQueueTxs      = 32768 // Maximum transactions hashes to keep in the known list (prevent DOS)
 	maxKnownBlocks   = 1024  // Maximum block hashes to keep in the known list (prevent DOS)
 	handshakeTimeout = 5 * time.Second
 )
@@ -65,6 +66,7 @@ type peer struct {
 
 	knownTxs    *set.Set // Set of transaction hashes known to be known by this peer
 	knownBlocks *set.Set // Set of block hashes known to be known by this peer
+	queueTxs    *set.Set // Set of transaction hashes known to be known by this peer
 }
 
 func newPeer(version int, p *p2p.Peer, rw p2p.MsgReadWriter) *peer {
@@ -76,6 +78,7 @@ func newPeer(version int, p *p2p.Peer, rw p2p.MsgReadWriter) *peer {
 		version:     version,
 		id:          fmt.Sprintf("%x", id[:8]),
 		knownTxs:    set.New(),
+		queueTxs:    set.New(),
 		knownBlocks: set.New(),
 	}
 }
@@ -414,4 +417,21 @@ func (ps *peerSet) Close() {
 		p.Disconnect(p2p.DiscQuitting)
 	}
 	ps.closed = true
+}
+
+func (p *peer) AddQueueTransaction(tx *types.Transaction) {
+	// If we reached the memory allowance, drop a previously known transaction hash
+	for p.queueTxs.Size() >= maxQueueTxs {
+		tx := p.queueTxs.Pop()
+		p.Log().Info("Queue full remove Transaction from peer", "p", p, "tx", tx)
+	}
+	p.queueTxs.Add(tx)
+}
+
+func (p *peer) GetTransactionFromQueue() *types.Transaction {
+	tx := p.queueTxs.Pop()
+	if tx != nil {
+		return tx.(*types.Transaction)
+	}
+	return nil
 }
