@@ -97,7 +97,7 @@ func CreateTransactionSign(chainConfig *params.ChainConfig, pool *core.TxPool, m
 			randomizeKeyValue := RandStringByte(32)
 			chainDb.Put(randomizeKeyName, randomizeKeyValue)
 
-			tx, err := BuildTxSecretRandomize(nonce, common.HexToAddress(common.RandomizeSMC), chainConfig.Posv.Epoch, randomizeKeyValue)
+			tx, err := BuildTxSecretRandomize(nonce+1, common.HexToAddress(common.RandomizeSMC), chainConfig.Posv.Epoch, randomizeKeyValue)
 			if err != nil {
 				log.Error("Fail to get tx opening for randomize", "error", err)
 				return err
@@ -121,7 +121,7 @@ func CreateTransactionSign(chainConfig *params.ChainConfig, pool *core.TxPool, m
 				log.Error("Fail to get randomize key from state db.", "error", err)
 			}
 
-			tx, err := BuildTxOpeningRandomize(nonce, common.HexToAddress(common.RandomizeSMC), randomizeKeyValue)
+			tx, err := BuildTxOpeningRandomize(nonce+1, common.HexToAddress(common.RandomizeSMC), randomizeKeyValue)
 			if err != nil {
 				log.Error("Fail to get tx opening for randomize", "error", err)
 				return err
