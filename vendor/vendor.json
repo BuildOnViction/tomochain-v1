@@ -51,6 +51,18 @@
 			"revisionTime": "2018-01-16T20:38:02Z"
 		},
 		{
+			"checksumSHA1": "pqmjVcJYh5FLLnvGjx3p7OiLz2Q=",
+			"path": "github.com/allegro/bigcache",
+			"revision": "06975fd8de981b85f94a4e5bed7c32999030cef3",
+			"revisionTime": "2018-11-25T13:30:12Z"
+		},
+		{
+			"checksumSHA1": "zqToN+R6KybEskp1D4G/lAOKXU4=",
+			"path": "github.com/allegro/bigcache/queue",
+			"revision": "06975fd8de981b85f94a4e5bed7c32999030cef3",
+			"revisionTime": "2018-11-25T13:30:12Z"
+		},
+		{
 			"checksumSHA1": "USkefO0g1U9mr+8hagv3fpSkrxg=",
 			"path": "github.com/aristanetworks/goarista/monotime",
 			"revision": "ea17b1a17847fb6e4c0a91de0b674704693469b0",
@@ -554,6 +566,12 @@
 			"path": "golang.org/x/crypto/scrypt",
 			"revision": "6a293f2d4b14b8e6d3f0539e383f6d0d30fce3fd",
 			"revisionTime": "2017-09-25T11:22:06Z"
+		},
+		{
+			"checksumSHA1": "hUsBzxJ8KTL4v0vpPT/mqvdJ46s=",
+			"path": "golang.org/x/crypto/sha3",
+			"revision": "ff983b9c42bc9fbf91556e191cc8efb585c16908",
+			"revisionTime": "2018-07-25T11:53:45Z"
 		},
 		{
 			"checksumSHA1": "Wi44TcpIOXdojyVWkvyOBnBKIS4=",

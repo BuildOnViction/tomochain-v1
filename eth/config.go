@@ -30,7 +30,6 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/eth/gasprice"
-	"github.com/ethereum/go-ethereum/params"
 )
 
 // DefaultConfig contains default settings for use on the Ethereum main net.
@@ -43,12 +42,12 @@ var DefaultConfig = Config{
 		DatasetsInMem:  1,
 		DatasetsOnDisk: 2,
 	},
-	NetworkId:     89,
-	LightPeers:    100,
-	DatabaseCache: 768,
-	TrieCache:     256,
-	TrieTimeout:   5 * time.Minute,
-	GasPrice:      big.NewInt(18 * params.Shannon),
+	NetworkId:      89,
+	LightPeers:     100,
+	DatabaseCache:  512,
+	TrieCleanCache: 256,
+	TrieDirtyCache: 256,
+	TrieTimeout:    60 * time.Minute,
 
 	TxPool: core.DefaultTxPoolConfig,
 	GPO: gasprice.Config{
@@ -93,6 +92,8 @@ type Config struct {
 	DatabaseCache      int
 	TrieCache          int
 	TrieTimeout        time.Duration
+	TrieCleanCache     int
+	TrieDirtyCache     int
 
 	// Mining-related options
 	Etherbase    common.Address `toml:",omitempty"`

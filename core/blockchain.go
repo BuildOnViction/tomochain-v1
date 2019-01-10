@@ -71,9 +71,10 @@ const (
 // CacheConfig contains the configuration values for the trie caching/pruning
 // that's resident in a blockchain.
 type CacheConfig struct {
-	Disabled      bool          // Whether to disable trie write caching (archive node)
-	TrieNodeLimit int           // Memory limit (MB) at which to flush the current in-memory trie to disk
-	TrieTimeLimit time.Duration // Time limit after which to flush the current in-memory trie to disk
+	Disabled       bool          // Whether to disable trie write caching (archive node)
+	TrieCleanLimit int           // Memory allowance (MB) to use for caching trie nodes in memory
+	TrieDirtyLimit int           // Memory limit (MB) at which to start flushing dirty trie nodes to disk
+	TrieTimeLimit  time.Duration // Time limit after which to flush the current in-memory trie to disk
 }
 type ResultProcessBlock struct {
 	logs     []*types.Log
@@ -152,8 +153,9 @@ type BlockChain struct {
 func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *params.ChainConfig, engine consensus.Engine, vmConfig vm.Config) (*BlockChain, error) {
 	if cacheConfig == nil {
 		cacheConfig = &CacheConfig{
-			TrieNodeLimit: 256 * 1024 * 1024,
-			TrieTimeLimit: 5 * time.Minute,
+			TrieCleanLimit: 256,
+			TrieDirtyLimit: 256,
+			TrieTimeLimit:  5 * time.Minute,
 		}
 	}
 	bodyCache, _ := lru.New(bodyCacheLimit)
@@ -169,7 +171,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		cacheConfig:      cacheConfig,
 		db:               db,
 		triegc:           prque.New(),
-		stateCache:       state.NewDatabase(db),
+		stateCache:       state.NewDatabaseWithCache(db, cacheConfig.TrieCleanLimit),
 		quit:             make(chan struct{}),
 		bodyCache:        bodyCache,
 		bodyRLPCache:     bodyRLPCache,
@@ -401,6 +403,10 @@ func (bc *BlockChain) Processor() Processor {
 // State returns a new mutable state based on the current HEAD block.
 func (bc *BlockChain) State() (*state.StateDB, error) {
 	return bc.StateAt(bc.CurrentBlock().Root())
+}
+
+func (bc *BlockChain) StateCache() state.Database {
+	return bc.stateCache
 }
 
 // StateAt returns a new mutable state based on a particular point in time.
@@ -688,9 +694,9 @@ func (bc *BlockChain) Stop() {
 			}
 		}
 		for !bc.triegc.Empty() {
-			triedb.Dereference(bc.triegc.PopItem().(common.Hash), common.Hash{})
+			triedb.Dereference(bc.triegc.PopItem().(common.Hash))
 		}
-		if size := triedb.Size(); size != 0 {
+		if size, _ := triedb.Size(); size != 0 {
 			log.Error("Dangling trie nodes after full cleanup")
 		}
 	}
@@ -948,8 +954,8 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 			// Only write to disk if we exceeded our memory allowance *and* also have at
 			// least a given number of tries gapped.
 			var (
-				size  = triedb.Size()
-				limit = common.StorageSize(bc.cacheConfig.TrieNodeLimit) * 1024 * 1024
+				size, _ = triedb.Size()
+				limit   = common.StorageSize(bc.cacheConfig.TrieDirtyLimit) * 1024 * 1024
 			)
 			if size > limit || bc.gcproc > bc.cacheConfig.TrieTimeLimit {
 				// If we're exceeding limits but haven't reached a large enough memory gap,
@@ -976,7 +982,7 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 					bc.triegc.Push(root, number)
 					break
 				}
-				triedb.Dereference(root.(common.Hash), common.Hash{})
+				triedb.Dereference(root.(common.Hash))
 			}
 		}
 	}
@@ -1213,7 +1219,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 		}
 		stats.processed++
 		stats.usedGas += usedGas
-		stats.report(chain, i, bc.stateCache.TrieDB().Size())
+		cache, _ := bc.stateCache.TrieDB().Size()
+		stats.report(chain, i, cache)
 		if status == CanonStatTy && bc.chainConfig.Posv != nil {
 			// epoch block
 			if (chain[i].NumberU64() % bc.chainConfig.Posv.Epoch) == 0 {
@@ -1413,7 +1420,8 @@ func (bc *BlockChain) insertBlock(block *types.Block) ([]interface{}, []*types.L
 	}
 	stats.processed++
 	stats.usedGas += result.usedGas
-	stats.report(types.Blocks{block}, 0, bc.stateCache.TrieDB().Size())
+	cache, _ := bc.stateCache.TrieDB().Size()
+	stats.report(types.Blocks{block}, 0, cache)
 	if status == CanonStatTy && bc.chainConfig.Posv != nil {
 		// epoch block
 		if (block.NumberU64() % bc.chainConfig.Posv.Epoch) == 0 {

@@ -38,8 +38,8 @@ type testAccount struct {
 // makeTestState create a sample test state to test node-wise reconstruction.
 func makeTestState() (Database, common.Hash, []*testAccount) {
 	// Create an empty state
-	diskdb, _ := ethdb.NewMemDatabase()
-	db := NewDatabase(diskdb)
+	db1, _ := ethdb.NewMemDatabase()
+	db := NewDatabase(db1)
 	state, _ := New(common.Hash{}, db)
 
 	// Fill it with some arbitrary data

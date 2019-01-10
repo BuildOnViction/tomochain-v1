@@ -28,18 +28,16 @@ import (
 )
 
 func newEmptySecure() *SecureTrie {
-	diskdb, _ := ethdb.NewMemDatabase()
-	triedb := NewDatabase(diskdb)
-
-	trie, _ := NewSecure(common.Hash{}, triedb, 0)
+	db, _ := ethdb.NewMemDatabase()
+	trie, _ := NewSecure(common.Hash{}, NewDatabase(db), 0)
 	return trie
 }
 
 // makeTestSecureTrie creates a large enough secure trie for testing.
 func makeTestSecureTrie() (*Database, *SecureTrie, map[string][]byte) {
 	// Create an empty trie
-	diskdb, _ := ethdb.NewMemDatabase()
-	triedb := NewDatabase(diskdb)
+	db, _ := ethdb.NewMemDatabase()
+	triedb := NewDatabase(db)
 
 	trie, _ := NewSecure(common.Hash{}, triedb, 0)
 

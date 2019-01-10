@@ -1262,12 +1262,13 @@ func MakeChain(ctx *cli.Context, stack *node.Node) (chain *core.BlockChain, chai
 		Fatalf("--%s must be either 'full' or 'archive'", GCModeFlag.Name)
 	}
 	cache := &core.CacheConfig{
-		Disabled:      ctx.GlobalString(GCModeFlag.Name) == "archive",
-		TrieNodeLimit: eth.DefaultConfig.TrieCache,
-		TrieTimeLimit: eth.DefaultConfig.TrieTimeout,
+		Disabled:       ctx.GlobalString(GCModeFlag.Name) == "archive",
+		TrieCleanLimit: eth.DefaultConfig.TrieCleanCache,
+		TrieDirtyLimit: eth.DefaultConfig.TrieDirtyCache,
+		TrieTimeLimit:  eth.DefaultConfig.TrieTimeout,
 	}
 	if ctx.GlobalIsSet(CacheFlag.Name) || ctx.GlobalIsSet(CacheGCFlag.Name) {
-		cache.TrieNodeLimit = ctx.GlobalInt(CacheFlag.Name) * ctx.GlobalInt(CacheGCFlag.Name) / 100
+		cache.TrieCleanLimit = ctx.GlobalInt(CacheFlag.Name) * ctx.GlobalInt(CacheGCFlag.Name) / 100
 	}
 	vmcfg := vm.Config{EnablePreimageRecording: ctx.GlobalBool(VMEnableDebugFlag.Name)}
 	chain, err = core.NewBlockChain(chainDb, cache, config, engine, vmcfg)
