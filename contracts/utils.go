@@ -318,34 +318,36 @@ func GetRewardForCheckpoint(chain consensus.ChainReader, blockSignerAddr common.
 
 	if len(masternodes) > 0 {
 		for i := startBlockNumber; i <= endBlockNumber; i++ {
-			block := chain.GetHeaderByNumber(i)
-			addrs, err := GetSignersFromContract(blockSignerAddr, client, block.Hash())
-			if err != nil {
-				log.Error("Fail to get signers from smartcontract.", "error", err, "blockNumber", i)
-				return nil, err
-			}
-			// Filter duplicate address.
-			if len(addrs) > 0 {
-				addrSigners := make(map[common.Address]bool)
-				for _, masternode := range masternodes {
-					for _, addr := range addrs {
-						if addr == masternode {
-							if _, ok := addrSigners[addr]; !ok {
-								addrSigners[addr] = true
+			if i%common.MergeSignRange == 0 || !chain.Config().IsTIP2019(big.NewInt(int64(i))) {
+				block := chain.GetHeaderByNumber(i)
+				addrs, err := GetSignersFromContract(blockSignerAddr, client, block.Hash())
+				if err != nil {
+					log.Error("Fail to get signers from smartcontract.", "error", err, "blockNumber", i)
+					return nil, err
+				}
+				// Filter duplicate address.
+				if len(addrs) > 0 {
+					addrSigners := make(map[common.Address]bool)
+					for _, masternode := range masternodes {
+						for _, addr := range addrs {
+							if addr == masternode {
+								if _, ok := addrSigners[addr]; !ok {
+									addrSigners[addr] = true
+								}
+								break
 							}
-							break
 						}
 					}
-				}
 
-				for addr := range addrSigners {
-					_, exist := signers[addr]
-					if exist {
-						signers[addr].Sign++
-					} else {
-						signers[addr] = &rewardLog{1, new(big.Int)}
+					for addr := range addrSigners {
+						_, exist := signers[addr]
+						if exist {
+							signers[addr].Sign++
+						} else {
+							signers[addr] = &rewardLog{1, new(big.Int)}
+						}
+						*totalSigner++
 					}
-					*totalSigner++
 				}
 			}
 		}
@@ -395,8 +397,8 @@ func GetCandidatesOwnerBySigner(validator *contractValidator.TomoValidator, sign
 }
 
 // Calculate reward for holders.
-func CalculateRewardForHolders(foudationWalletAddr common.Address, validator *contractValidator.TomoValidator, state *state.StateDB, signer common.Address, calcReward *big.Int) (error, map[common.Address]*big.Int) {
-	rewards, err := GetRewardBalancesRate(foudationWalletAddr, signer, calcReward, validator)
+func CalculateRewardForHolders(foudationWalletAddr common.Address, validator *contractValidator.TomoValidator, state *state.StateDB, signer common.Address, calcReward *big.Int, blockNumber uint64) (error, map[common.Address]*big.Int) {
+	rewards, err := GetRewardBalancesRate(foudationWalletAddr, signer, calcReward, validator, blockNumber)
 	if err != nil {
 		return err, nil
 	}
@@ -409,7 +411,7 @@ func CalculateRewardForHolders(foudationWalletAddr common.Address, validator *co
 }
 
 // Get reward balance rates for master node, founder and holders.
-func GetRewardBalancesRate(foudationWalletAddr common.Address, masterAddr common.Address, totalReward *big.Int, validator *contractValidator.TomoValidator) (map[common.Address]*big.Int, error) {
+func GetRewardBalancesRate(foudationWalletAddr common.Address, masterAddr common.Address, totalReward *big.Int, validator *contractValidator.TomoValidator, blockNumber uint64) (map[common.Address]*big.Int, error) {
 	owner := GetCandidatesOwnerBySigner(validator, masterAddr)
 	balances := make(map[common.Address]*big.Int)
 	rewardMaster := new(big.Int).Mul(totalReward, new(big.Int).SetInt64(common.RewardMasterPercent))
@@ -430,12 +432,14 @@ func GetRewardBalancesRate(foudationWalletAddr common.Address, masterAddr common
 		// Get voters capacities.
 		voterCaps := make(map[common.Address]*big.Int)
 		for _, voteAddr := range voters {
+			if _, ok := voterCaps[voteAddr]; ok && common.TIP2019Block.Uint64() <= blockNumber {
+				continue
+			}
 			voterCap, err := validator.GetVoterCap(opts, masterAddr, voteAddr)
 			if err != nil {
 				log.Error("Fail to get vote capacity", "error", err)
 				return nil, err
 			}
-
 			totalCap.Add(totalCap, voterCap)
 			voterCaps[voteAddr] = voterCap
 		}

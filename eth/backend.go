@@ -197,8 +197,10 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 				// silently return as this node doesn't have masternode permission to sign block
 				return nil
 			}
-			if err := contracts.CreateTransactionSign(chainConfig, eth.txPool, eth.accountManager, block, chainDb); err != nil {
-				return fmt.Errorf("Fail to create tx sign for importing block: %v", err)
+			if block.NumberU64()%common.MergeSignRange == 0 || !eth.chainConfig.IsTIP2019(block.Number()) {
+				if err := contracts.CreateTransactionSign(chainConfig, eth.txPool, eth.accountManager, block, chainDb); err != nil {
+					return fmt.Errorf("Fail to create tx sign for importing block: %v", err)
+				}
 			}
 			return nil
 		}
@@ -257,25 +259,27 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 					blockSignerAddr := common.HexToAddress(common.BlockSigners)
 					// Loop for each block to check missing sign.
 					for i := prevEpoc; i < blockNumberEpoc; i++ {
-						blockHeader := chain.GetHeaderByNumber(i)
-						if len(penSigners) > 0 {
-							signedMasternodes, err := contracts.GetSignersFromContract(blockSignerAddr, client, blockHeader.Hash())
-							if err != nil {
-								return nil, err
-							}
-							if len(signedMasternodes) > 0 {
-								// Check signer signed?
-								for _, signed := range signedMasternodes {
-									for j, addr := range penSigners {
-										if signed == addr {
-											// Remove it from dupSigners.
-											penSigners = append(penSigners[:j], penSigners[j+1:]...)
+						if i%common.MergeSignRange == 0 || !chainConfig.IsTIP2019(big.NewInt(int64(i))) {
+							blockHeader := chain.GetHeaderByNumber(i)
+							if len(penSigners) > 0 {
+								signedMasternodes, err := contracts.GetSignersFromContract(blockSignerAddr, client, blockHeader.Hash())
+								if err != nil {
+									return nil, err
+								}
+								if len(signedMasternodes) > 0 {
+									// Check signer signed?
+									for _, signed := range signedMasternodes {
+										for j, addr := range penSigners {
+											if signed == addr {
+												// Remove it from dupSigners.
+												penSigners = append(penSigners[:j], penSigners[j+1:]...)
+											}
 										}
 									}
 								}
+							} else {
+								break
 							}
-						} else {
-							break
 						}
 					}
 				}
@@ -325,7 +329,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 				voterResults := make(map[common.Address]interface{})
 				if len(signers) > 0 {
 					for signer, calcReward := range rewardSigners {
-						err, rewards := contracts.CalculateRewardForHolders(foudationWalletAddr, validator, state, signer, calcReward)
+						err, rewards := contracts.CalculateRewardForHolders(foudationWalletAddr, validator, state, signer, calcReward, number)
 						if err != nil {
 							log.Crit("Fail to calculate reward for holders.", "error", err)
 						}
