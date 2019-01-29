@@ -1,4 +1,4 @@
-// Copyright (c) 2018 Tomochain
+// Copyright (c) 2018 caelumchain
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
@@ -92,10 +92,10 @@ func TestRewardBalance(t *testing.T) {
 	accounts := []*bind.TransactOpts{acc1Opts, acc2Opts}
 	transactOpts := bind.NewKeyedTransactor(acc1Key)
 
-	// validatorAddr, _, baseValidator, err := contract.DeployTomoValidator(transactOpts, contractBackend, big.NewInt(50000), big.NewInt(99), big.NewInt(100), big.NewInt(100))
+	// validatorAddr, _, baseValidator, err := contract.DeploycaelumValidator(transactOpts, contractBackend, big.NewInt(50000), big.NewInt(99), big.NewInt(100), big.NewInt(100))
 	validatorCap := new(big.Int)
 	validatorCap.SetString("50000000000000000000000", 10)
-	validatorAddr, _, baseValidator, err := contractValidator.DeployTomoValidator(
+	validatorAddr, _, baseValidator, err := contractValidator.DeploycaelumValidator(
 		transactOpts,
 		contractBackend,
 		[]common.Address{addr},
@@ -177,7 +177,7 @@ func TestRewardBalance(t *testing.T) {
 
 }
 
-func GetRewardBalancesRate(foudationWalletAddr common.Address, masterAddr common.Address, totalReward *big.Int, validator *contractValidator.TomoValidator) (map[common.Address]*big.Int, error) {
+func GetRewardBalancesRate(foudationWalletAddr common.Address, masterAddr common.Address, totalReward *big.Int, validator *contractValidator.caelumValidator) (map[common.Address]*big.Int, error) {
 	owner := GetCandidatesOwnerBySigner(validator, masterAddr)
 	balances := make(map[common.Address]*big.Int)
 	rewardMaster := new(big.Int).Mul(totalReward, new(big.Int).SetInt64(common.RewardMasterPercent))
@@ -238,7 +238,7 @@ func GetRewardBalancesRate(foudationWalletAddr common.Address, masterAddr common
 	return balances, nil
 }
 
-func GetCandidatesOwnerBySigner(validator *contractValidator.TomoValidator, signerAddr common.Address) common.Address {
+func GetCandidatesOwnerBySigner(validator *contractValidator.caelumValidator, signerAddr common.Address) common.Address {
 	owner := signerAddr
 	opts := new(bind.CallOpts)
 	owner, err := validator.GetCandidateOwner(opts, signerAddr)

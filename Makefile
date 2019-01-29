@@ -1,6 +1,6 @@
-.PHONY: tomo tomo-cross evm all test clean
-.PHONY: tomo-linux tomo-linux-386 tomo-linux-amd64 tomo-linux-mips64 tomo-linux-mips64le
-.PHONY: tomo-darwin tomo-darwin-386 tomo-darwin-amd64
+.PHONY: caelum caelum-cross evm all test clean
+.PHONY: caelum-linux caelum-linux-386 caelum-linux-amd64 caelum-linux-mips64 caelum-linux-mips64le
+.PHONY: caelum-darwin caelum-darwin-386 caelum-darwin-amd64
 
 GOBIN = $(shell pwd)/build/bin
 GOFMT = gofmt
@@ -10,10 +10,10 @@ GO_FILES := $(shell find $(shell go list -f '{{.Dir}}' $(GO_PACKAGES)) -name \*.
 
 GIT = git
 
-tomo:
-	build/env.sh go run build/ci.go install ./cmd/tomo
+caelum:
+	build/env.sh go run build/ci.go install ./cmd/caelum
 	@echo "Done building."
-	@echo "Run \"$(GOBIN)/tomo\" to launch tomo."
+	@echo "Run \"$(GOBIN)/caelum\" to launch caelum."
 
 bootnode:
 	build/env.sh go run build/ci.go install ./cmd/bootnode
@@ -36,57 +36,57 @@ clean:
 
 # Cross Compilation Targets (xgo)
 
-tomo-cross: tomo-linux tomo-darwin
+caelum-cross: caelum-linux caelum-darwin
 	@echo "Full cross compilation done:"
-	@ls -ld $(GOBIN)/tomo-*
+	@ls -ld $(GOBIN)/caelum-*
 
-tomo-linux: tomo-linux-386 tomo-linux-amd64 tomo-linux-mips64 tomo-linux-mips64le
+caelum-linux: caelum-linux-386 caelum-linux-amd64 caelum-linux-mips64 caelum-linux-mips64le
 	@echo "Linux cross compilation done:"
-	@ls -ld $(GOBIN)/tomo-linux-*
+	@ls -ld $(GOBIN)/caelum-linux-*
 
-tomo-linux-386:
-	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/386 -v ./cmd/tomo
+caelum-linux-386:
+	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/386 -v ./cmd/caelum
 	@echo "Linux 386 cross compilation done:"
-	@ls -ld $(GOBIN)/tomo-linux-* | grep 386
+	@ls -ld $(GOBIN)/caelum-linux-* | grep 386
 
-tomo-linux-amd64:
-	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/amd64 -v ./cmd/tomo
+caelum-linux-amd64:
+	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/amd64 -v ./cmd/caelum
 	@echo "Linux amd64 cross compilation done:"
-	@ls -ld $(GOBIN)/tomo-linux-* | grep amd64
+	@ls -ld $(GOBIN)/caelum-linux-* | grep amd64
 
-tomo-linux-mips:
-	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/mips --ldflags '-extldflags "-static"' -v ./cmd/tomo
+caelum-linux-mips:
+	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/mips --ldflags '-extldflags "-static"' -v ./cmd/caelum
 	@echo "Linux MIPS cross compilation done:"
-	@ls -ld $(GOBIN)/tomo-linux-* | grep mips
+	@ls -ld $(GOBIN)/caelum-linux-* | grep mips
 
-tomo-linux-mipsle:
-	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/mipsle --ldflags '-extldflags "-static"' -v ./cmd/tomo
+caelum-linux-mipsle:
+	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/mipsle --ldflags '-extldflags "-static"' -v ./cmd/caelum
 	@echo "Linux MIPSle cross compilation done:"
-	@ls -ld $(GOBIN)/tomo-linux-* | grep mipsle
+	@ls -ld $(GOBIN)/caelum-linux-* | grep mipsle
 
-tomo-linux-mips64:
-	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/mips64 --ldflags '-extldflags "-static"' -v ./cmd/tomo
+caelum-linux-mips64:
+	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/mips64 --ldflags '-extldflags "-static"' -v ./cmd/caelum
 	@echo "Linux MIPS64 cross compilation done:"
-	@ls -ld $(GOBIN)/tomo-linux-* | grep mips64
+	@ls -ld $(GOBIN)/caelum-linux-* | grep mips64
 
-tomo-linux-mips64le:
-	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/mips64le --ldflags '-extldflags "-static"' -v ./cmd/tomo
+caelum-linux-mips64le:
+	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/mips64le --ldflags '-extldflags "-static"' -v ./cmd/caelum
 	@echo "Linux MIPS64le cross compilation done:"
-	@ls -ld $(GOBIN)/tomo-linux-* | grep mips64le
+	@ls -ld $(GOBIN)/caelum-linux-* | grep mips64le
 
-tomo-darwin: tomo-darwin-386 tomo-darwin-amd64
+caelum-darwin: caelum-darwin-386 caelum-darwin-amd64
 	@echo "Darwin cross compilation done:"
-	@ls -ld $(GOBIN)/tomo-darwin-*
+	@ls -ld $(GOBIN)/caelum-darwin-*
 
-tomo-darwin-386:
-	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=darwin/386 -v ./cmd/tomo
+caelum-darwin-386:
+	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=darwin/386 -v ./cmd/caelum
 	@echo "Darwin 386 cross compilation done:"
-	@ls -ld $(GOBIN)/tomo-darwin-* | grep 386
+	@ls -ld $(GOBIN)/caelum-darwin-* | grep 386
 
-tomo-darwin-amd64:
-	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=darwin/amd64 -v ./cmd/tomo
+caelum-darwin-amd64:
+	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=darwin/amd64 -v ./cmd/caelum
 	@echo "Darwin amd64 cross compilation done:"
-	@ls -ld $(GOBIN)/tomo-darwin-* | grep amd64
+	@ls -ld $(GOBIN)/caelum-darwin-* | grep amd64
 
 gofmt:
 	$(GOFMT) -s -w $(GO_FILES)

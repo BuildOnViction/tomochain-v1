@@ -1,4 +1,4 @@
-// Copyright (c) 2018 Tomochain
+// Copyright (c) 2018 caelumchain
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
@@ -23,18 +23,18 @@ import (
 )
 
 type Validator struct {
-	*contract.TomoValidatorSession
+	*contract.caelumValidatorSession
 	contractBackend bind.ContractBackend
 }
 
 func NewValidator(transactOpts *bind.TransactOpts, contractAddr common.Address, contractBackend bind.ContractBackend) (*Validator, error) {
-	validator, err := contract.NewTomoValidator(contractAddr, contractBackend)
+	validator, err := contract.NewcaelumValidator(contractAddr, contractBackend)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Validator{
-		&contract.TomoValidatorSession{
+		&contract.caelumValidatorSession{
 			Contract:     validator,
 			TransactOpts: *transactOpts,
 		},
@@ -47,12 +47,12 @@ func DeployValidator(transactOpts *bind.TransactOpts, contractBackend bind.Contr
 	minDeposit.SetString("50000000000000000000000", 10)
 	minVoterCap := new(big.Int)
 	minVoterCap.SetString("10000000000000000000", 10)
-	// Deposit 50K TOMO
-	// Min Voter Cap 10 TOMO
+	// Deposit 50K CAELUM
+	// Min Voter Cap 10 CAELUM
 	// 150 masternodes
 	// Candidate Delay Withdraw 30 days = 1296000 blocks
 	// Voter Delay Withdraw 2 days = 86400 blocks
-	validatorAddr, _, _, err := contract.DeployTomoValidator(transactOpts, contractBackend, validatorAddress, caps, ownerAddress, minDeposit, minVoterCap, big.NewInt(150), big.NewInt(1296000), big.NewInt(86400))
+	validatorAddr, _, _, err := contract.DeploycaelumValidator(transactOpts, contractBackend, validatorAddress, caps, ownerAddress, minDeposit, minVoterCap, big.NewInt(150), big.NewInt(1296000), big.NewInt(86400))
 	if err != nil {
 		return validatorAddr, nil, err
 	}

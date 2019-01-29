@@ -1,4 +1,4 @@
-// Copyright (c) 2018 Tomochain
+// Copyright (c) 2018 caelumchain
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
@@ -484,7 +484,7 @@ func whoIsCreator(snap *Snapshot, header *types.Header) (common.Address, error) 
 func (c *Posv) YourTurn(chain consensus.ChainReader, parent *types.Header, signer common.Address) (int, int, int, bool, error) {
 	masternodes := c.GetMasternodes(chain, parent)
 	if common.IsTestnet {
-		// Only three mns for tomo testnet.
+		// Only three mns for caelum testnet.
 		masternodes = masternodes[:3]
 	}
 	snap, err := c.GetSnapshot(chain, parent)

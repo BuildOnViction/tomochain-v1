@@ -1,96 +1,96 @@
-# Tomochain
+# caelumchain
 
-[![Build Status](https://travis-ci.org/tomochain/tomochain.svg?branch=master)](https://travis-ci.org/tomochain/tomochain)
-[![Join the chat at https://gitter.im/tomochain/tomochain](https://badges.gitter.im/tomochain/tomochain.svg)](https://gitter.im/tomochain/tomochain?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![Build Status](https://travis-ci.org/go-caelum/go-caelum.svg?branch=master)](https://travis-ci.org/go-caelum/go-caelum)
+[![Join the chat at https://gitter.im/go-caelum/go-caelum](https://badges.gitter.im/go-caelum/go-caelum.svg)](https://gitter.im/go-caelum/go-caelum?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
-## About Tomochain
+## About caelumchain
 
-TomoChain is an innovative solution to the scalability problem with the Ethereum blockchain.
+caelumChain is an innovative solution to the scalability problem with the Ethereum blockchain.
 Our mission is to be a leading force in building the Internet of Value, and its infrastructure.
 We are working to create an alternative, scalable financial system which is more secure, transparent, efficient, inclusive, and equitable for everyone.
 
-TomoChain relies on a system of 150 Masternodes with a Proof of Stake Voting consensus that can support near-zero fee, and 2-second transaction confirmation times.
+caelumChain relies on a system of 150 Masternodes with a Proof of Stake Voting consensus that can support near-zero fee, and 2-second transaction confirmation times.
 Security, stability, and chain finality are guaranteed via novel techniques such as double validation, staking via smart-contracts, and "true" randomization processes.
 
-Tomochain supports all EVM-compatible smart-contracts, protocols, and atomic cross-chain token transfers.
-New scaling techniques such as sharding, private-chain generation, and hardware integration will be continuously researched and incorporated into Tomochain's masternode architecture. This architecture will be an ideal scalable smart-contract public blockchain for decentralized apps, token issuances, and token integrations for small and big businesses.
+caelumchain supports all EVM-compatible smart-contracts, protocols, and atomic cross-chain token transfers.
+New scaling techniques such as sharding, private-chain generation, and hardware integration will be continuously researched and incorporated into caelumchain's masternode architecture. This architecture will be an ideal scalable smart-contract public blockchain for decentralized apps, token issuances, and token integrations for small and big businesses.
 
-More details can be found at our [technical white paper](https://tomochain.com/docs/technical-whitepaper---1.0.pdf)
+More details can be found at our [technical white paper](https://go-caelum.com/docs/technical-whitepaper---1.0.pdf)
 
 Read more about us on:
 
-- our website: http://tomochain.com
-- our blogs and announcements: https://medium.com/tomochain
-- our documentation portal: https://docs.tomochain.com
+- our website: http://go-caelum.com
+- our blogs and announcements: https://medium.com/go-caelum
+- our documentation portal: https://docs.go-caelum.com
 
 ## Building the source
 
-Tomochain provides a client binary called `tomo` for both running a masternode and running a full-node.
-Building `tomo` requires both a Go (1.7+) and C compiler; install both of these.
+caelumchain provides a client binary called `caelum` for both running a masternode and running a full-node.
+Building `caelum` requires both a Go (1.7+) and C compiler; install both of these.
 
 Once the dependencies are installed, just run the below commands:
 
 ```bash
-$ git clone https://github.com/tomochain/tomochain tomochain
-$ cd tomochain
-$ make tomo
+$ git clone https://github.com/go-caelum/go-caelum go-caelum
+$ cd go-caelum
+$ make caelum
 ```
 
-Alternatively, you could quickly download our pre-complied binary from our [github release page](https://github.com/tomochain/tomochain/releases)
+Alternatively, you could quickly download our pre-complied binary from our [github release page](https://github.com/go-caelum/go-caelum/releases)
 
-## Running tomo
+## Running caelum
 
-### Running a tomo masternode
+### Running a caelum masternode
 
-Please refer to the [official documentation](https://docs.tomochain.com/get-started/run-node/) on how to run a node if your goal is to run a masternode.
+Please refer to the [official documentation](https://docs.go-caelum.com/get-started/run-node/) on how to run a node if your goal is to run a masternode.
 The recommanded ways of running a node and applying to become a masternode are explained in detail there.
 
-### Attaching to the Tomochain test network
+### Attaching to the caelumchain test network
 
-We published our test network 2.0 with full implementation of PoSV consensus at https://stats.testnet.tomochain.com.
+We published our test network 2.0 with full implementation of PoSV consensus at https://stats.testnet.go-caelum.com.
 If you'd like to experiment with smart contract creation and DApps, you might be interested to give these a try on our Testnet.
 
 In order to connect to one of the masternodes on the Testnet, just run the command below:
 
 ```bash
-$ tomo attach https://testnet.tomochain.com
+$ caelum attach https://testnet.go-caelum.com
 ```
 
 This will open the JavaScript console and let you query the blockchain directly via RPC.
 
-### Running tomo locally
+### Running caelum locally
 
-If you would like to run tomo locally to see how it works under the hood and have a copy of the blockchain, you can try it on our Testnet by running the commands below:
+If you would like to run caelum locally to see how it works under the hood and have a copy of the blockchain, you can try it on our Testnet by running the commands below:
 
 ```bash
-// 1. create a folder to store tomochain data on your machine
+// 1. create a folder to store go-caelum data on your machine
 $ export DATA_DIR=/path/to/your/data/folder
-$ mkdir -p $DATA_DIR/tomo
+$ mkdir -p $DATA_DIR/caelum
 
 // 2. download our genesis file
 $ export GENESIS_PATH=$DATA_DIR/genesis.json
-$ curl -L https://raw.githubusercontent.com/tomochain/tomochain/master/genesis/testnet.json -o $GENESIS_PATH
+$ curl -L https://raw.githubusercontent.com/go-caelum/go-caelum/master/genesis/testnet.json -o $GENESIS_PATH
 
 // 3. init the chain from genesis
-$ tomo init $GENESIS_PATH --datadir $DATA_DIR
+$ caelum init $GENESIS_PATH --datadir $DATA_DIR
 
 // 4. get a test account. Create a new one if you don't have any:
 $ export KEYSTORE_DIR=keystore
 $ touch $DATA_DIR/password && echo 'your-password' > $DATA_DIR/password
-$ tomo account new \
+$ caelum account new \
       --datadir $DATA_DIR \
       --keystore $KEYSTORE_DIR \
       --password $DATA_DIR/password
 
 // if you already have a test account, import it now
-$ tomo  account import ./private_key \
+$ caelum  account import ./private_key \
       --datadir $DATA_DIR \
       --keystore $KEYSTORE_DIR \
       --password $DATA_DIR/password
 
 // get the account
 $ account=$(
-  tomo account list --datadir $DATA_DIR  --keystore $KEYSTORE_DIR \
+  caelum account list --datadir $DATA_DIR  --keystore $KEYSTORE_DIR \
   2> /dev/null \
   | head -n 1 \
   | cut -d"{" -f 2 | cut -d"}" -f 1
@@ -99,9 +99,9 @@ $ account=$(
 // 5. prepare the bootnodes list
 $ export BOOTNODES="enode://4d3c2cc0ce7135c1778c6f1cfda623ab44b4b6db55289543d48ecfde7d7111fd420c42174a9f2fea511a04cf6eac4ec69b4456bfaaae0e5bd236107d3172b013@52.221.28.223:30301,enode://298780104303fcdb37a84c5702ebd9ec660971629f68a933fd91f7350c54eea0e294b0857f1fd2e8dba2869fcc36b83e6de553c386cf4ff26f19672955d9f312@13.251.101.216:30301,enode://46dba3a8721c589bede3c134d755eb1a38ae7c5a4c69249b8317c55adc8d46a369f98b06514ecec4b4ff150712085176818d18f59a9e6311a52dbe68cff5b2ae@13.250.94.232:30301"
 
-// 6. Start up tomo now
+// 6. Start up caelum now
 $ export NAME=YOUR_NODE_NAME
-$ tomo \
+$ caelum \
   --verbosity 4 \
   --datadir $DATA_DIR \
   --keystore $KEYSTORE_DIR \
@@ -155,14 +155,14 @@ Thank you for considering to try out our network and/or help out with the source
 We would love to get your help; feel free to lend a hand.
 Even the smallest bit of code, bug reporting, or just discussing ideas are highly appreciated.
 
-If you would like to contribute to the tomochain source code, please refer to our Developer Guide for details on configuring development environment, managing dependencies, compiling, testing and submitting your code changes to our repo.
+If you would like to contribute to the go-caelum source code, please refer to our Developer Guide for details on configuring development environment, managing dependencies, compiling, testing and submitting your code changes to our repo.
 
 Please also make sure your contributions adhere to the base coding guidelines:
 
 - Code must adhere to official Go [formatting](https://golang.org/doc/effective_go.html#formatting) guidelines (i.e uses [gofmt](https://golang.org/cmd/gofmt/)).
 - Code comments must adhere to the official Go [commentary](https://golang.org/doc/effective_go.html#commentary) guidelines.
 - Pull requests need to be based on and opened against the `master` branch.
-- Any code you are trying to contribute must be well-explained as an issue on our [github issue page](https://github.com/tomochain/tomochain/issues)
+- Any code you are trying to contribute must be well-explained as an issue on our [github issue page](https://github.com/go-caelum/go-caelum/issues)
 - Commit messages should be short but clear enough and should refer to the corresponding pre-logged issue mentioned above.
 
-For technical discussion, feel free to join our chat at [Gitter](https://gitter.im/tomochain/tomochain).
+For technical discussion, feel free to join our chat at [Gitter](https://gitter.im/go-caelum/go-caelum).

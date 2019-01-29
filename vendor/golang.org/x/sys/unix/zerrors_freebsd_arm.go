@@ -991,7 +991,7 @@ const (
 	MCL_FUTURE                     = 0x2
 	MNT_ACLS                       = 0x8000000
 	MNT_ASYNC                      = 0x40
-	MNT_AUTOMOUNTED                = 0x200000000
+	MNT_AUcaelumUNTED                = 0x200000000
 	MNT_BYFSID                     = 0x8000000
 	MNT_CMDFLAGS                   = 0xd0f0000
 	MNT_DEFEXPORTED                = 0x200

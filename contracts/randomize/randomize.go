@@ -1,4 +1,4 @@
-// Copyright (c) 2018 Tomochain
+// Copyright (c) 2018 caelumchain
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
@@ -22,18 +22,18 @@ import (
 )
 
 type Randomize struct {
-	*contract.TomoRandomizeSession
+	*contract.caelumRandomizeSession
 	contractBackend bind.ContractBackend
 }
 
 func NewRandomize(transactOpts *bind.TransactOpts, contractAddr common.Address, contractBackend bind.ContractBackend) (*Randomize, error) {
-	randomize, err := contract.NewTomoRandomize(contractAddr, contractBackend)
+	randomize, err := contract.NewcaelumRandomize(contractAddr, contractBackend)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Randomize{
-		&contract.TomoRandomizeSession{
+		&contract.caelumRandomizeSession{
 			Contract:     randomize,
 			TransactOpts: *transactOpts,
 		},
@@ -42,7 +42,7 @@ func NewRandomize(transactOpts *bind.TransactOpts, contractAddr common.Address, 
 }
 
 func DeployRandomize(transactOpts *bind.TransactOpts, contractBackend bind.ContractBackend) (common.Address, *Randomize, error) {
-	randomizeAddr, _, _, err := contract.DeployTomoRandomize(transactOpts, contractBackend)
+	randomizeAddr, _, _, err := contract.DeploycaelumRandomize(transactOpts, contractBackend)
 	if err != nil {
 		return randomizeAddr, nil, err
 	}
