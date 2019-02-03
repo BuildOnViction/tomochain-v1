@@ -3715,6 +3715,11 @@ var inputBlockNumberFormatter = function (blockNumber) {
     return utils.toHex(blockNumber);
 };
 
+var inputBlockIncludeSignersFormatter = function (lightMode) {
+  // if lightMode is 'light', donot include includeSigners
+    return (lightMode !== "light")
+}
+
 /**
  * Formats the input of a transaction and converts all values to HEX
  *
@@ -3950,6 +3955,7 @@ var outputSyncingFormatter = function(result) {
 module.exports = {
     inputDefaultBlockNumberFormatter: inputDefaultBlockNumberFormatter,
     inputBlockNumberFormatter: inputBlockNumberFormatter,
+    inputBlockIncludeSignersFormatter: inputBlockIncludeSignersFormatter,
     inputCallFormatter: inputCallFormatter,
     inputTransactionFormatter: inputTransactionFormatter,
     inputAddressFormatter: inputAddressFormatter,
@@ -5292,16 +5298,16 @@ var methods = function () {
     var getBlock = new Method({
         name: 'getBlock',
         call: blockCall,
-        params: 2,
-        inputFormatter: [formatters.inputBlockNumberFormatter, function (val) { return !!val; }],
+        params: 3,
+        inputFormatter: [formatters.inputBlockNumberFormatter, formatters.inputBlockIncludeSignersFormatter, function (val) { return !!val; }],
         outputFormatter: formatters.outputBlockFormatter
     });
 
     var getUncle = new Method({
         name: 'getUncle',
         call: uncleCall,
-        params: 2,
-        inputFormatter: [formatters.inputBlockNumberFormatter, utils.toHex],
+        params: 3,
+        inputFormatter: [formatters.inputBlockNumberFormatter, utils.toHex, formatters.inputBlockIncludeSignersFormatter],
         outputFormatter: formatters.outputBlockFormatter,
 
     });
