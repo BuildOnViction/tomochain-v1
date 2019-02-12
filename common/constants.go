@@ -21,7 +21,7 @@ const (
 )
 
 var TIP2019Block = big.NewInt(1050000)
-var IsTestnet bool = false
+var IsTestnet bool = true
 var StoreRewardFolder string
 var RollbackHash Hash
 var MinGasPrice int64
