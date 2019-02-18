@@ -23,15 +23,14 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/big"
-	"math/rand"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/clique"
 	"github.com/ethereum/go-ethereum/consensus/misc"
@@ -60,13 +59,10 @@ type Masternode struct {
 
 // Posv proof-of-stake-voting protocol constants.
 var (
-	epochLength = uint64(900) // Default number of blocks after which to checkpoint and reset the pending votes
+	epochLength = uint64(900) // Default number of blocks after which to checkpoint
 
 	extraVanity = 32 // Fixed number of extra-data prefix bytes reserved for signer vanity
 	extraSeal   = 65 // Fixed number of extra-data suffix bytes reserved for signer seal
-
-	nonceAuthVote = hexutil.MustDecode("0xffffffffffffffff") // Magic nonce number to vote on adding a new signer
-	nonceDropVote = hexutil.MustDecode("0x0000000000000000") // Magic nonce number to vote on removing a signer.
 
 	uncleHash = types.CalcUncleHash(nil) // Always Keccak256(RLP([])) as uncles are meaningless outside of PoW.
 
@@ -86,14 +82,6 @@ var (
 	// errInvalidCheckpointBeneficiary is returned if a checkpoint/epoch transition
 	// block has a beneficiary set to non-zeroes.
 	errInvalidCheckpointBeneficiary = errors.New("beneficiary in checkpoint block non-zero")
-
-	// errInvalidVote is returned if a nonce value is something else that the two
-	// allowed constants of 0x00..0 or 0xff..f.
-	errInvalidVote = errors.New("vote nonce not 0x00..0 or 0xff..f")
-
-	// errInvalidCheckpointVote is returned if a checkpoint/epoch transition block
-	// has a vote nonce set to non-zeroes.
-	errInvalidCheckpointVote = errors.New("vote nonce in checkpoint block non-zero")
 
 	// errMissingVanity is returned if a block's extra-data section is shorter than
 	// 32 bytes, which is required to store the signer vanity.
@@ -219,7 +207,6 @@ type Posv struct {
 	signatures          *lru.ARCCache // Signatures of recent blocks to speed up mining
 	validatorSignatures *lru.ARCCache // Signatures of recent blocks to speed up mining
 	verifiedHeaders     *lru.ARCCache
-	proposals           map[common.Address]bool // Current list of proposals we are pushing
 
 	signer common.Address  // Ethereum address of the signing key
 	signFn clique.SignerFn // Signer function to authorize hashes with
@@ -231,6 +218,7 @@ type Posv struct {
 	HookPenaltyTIPSigning func(chain consensus.ChainReader, header *types.Header, candidate []common.Address) ([]common.Address, error)
 	HookValidator         func(header *types.Header, signers []common.Address) ([]byte, error)
 	HookVerifyMNs         func(header *types.Header, signers []common.Address) error
+	HookUpdateSigners     func() ([]Masternode, error)
 }
 
 // New creates a PoSV proof-of-stake-voting consensus engine with the initial
@@ -255,7 +243,6 @@ func New(config *params.PosvConfig, db ethdb.Database) *Posv {
 		signatures:          signatures,
 		verifiedHeaders:     verifiedHeaders,
 		validatorSignatures: validatorSignatures,
-		proposals:           make(map[common.Address]bool),
 	}
 }
 
@@ -330,13 +317,6 @@ func (c *Posv) verifyHeader(chain consensus.ChainReader, header *types.Header, p
 		return errInvalidCheckpointBeneficiary
 	}
 
-	// Nonces must be 0x00..0 or 0xff..f, zeroes enforced on checkpoints
-	if !bytes.Equal(header.Nonce[:], nonceAuthVote) && !bytes.Equal(header.Nonce[:], nonceDropVote) {
-		return errInvalidVote
-	}
-	if checkpoint && !bytes.Equal(header.Nonce[:], nonceDropVote) {
-		return errInvalidCheckpointVote
-	}
 	// Check that the extra-data contains both the vanity and signature
 	if len(header.Extra) < extraVanity {
 		return errMissingVanity
@@ -391,14 +371,27 @@ func (c *Posv) verifyCascadingFields(chain consensus.ChainReader, header *types.
 	if parent.Time.Uint64()+c.config.Period > header.Time.Uint64() {
 		return ErrInvalidTimestamp
 	}
-	// Retrieve the snapshot needed to verify this header and cache it
-	snap, err := c.snapshot(chain, number-1, header.ParentHash, parents)
-	if err != nil {
-		return err
-	}
+
 	// If the block is a checkpoint block, verify the signer list
 	if number%c.config.Epoch == 0 {
-		signers := snap.GetSigners()
+		var (
+			signers []common.Address
+			err     error
+		)
+		if chain.Config().IsTIPRemoveGap(header.Number) {
+			signers, err = c.UpdateSigners(chain, header)
+			if len(signers) == 0 || err != nil {
+				log.Crit("Error when update signers set to snapshot. Stopping node", "number", number)
+			}
+		} else {
+			var snap *Snapshot
+			snap, err = c.snapshot(chain, number-1, header.ParentHash, parents)
+			if err != nil {
+				return err
+			}
+			signers = snap.GetSigners()
+		}
+
 		penPenalties := []common.Address{}
 		if c.HookPenalty != nil || c.HookPenaltyTIPSigning != nil {
 			var err error = nil
@@ -424,6 +417,10 @@ func (c *Posv) verifyCascadingFields(chain consensus.ChainReader, header *types.
 				signers = RemovePenaltiesFromBlock(chain, signers, number-uint64(i)*c.config.Epoch)
 			}
 		}
+		// signers retrieves the list of authorized signers in ascending order, same function snapshot.GetSigners()
+		sort.Slice(signers, func(i, j int) bool {
+			return bytes.Compare(signers[i][:], signers[j][:]) < 0
+		})
 		byteMasterNodes := common.ExtractAddressToBytes(signers)
 		extraSuffix := len(header.Extra) - extraSeal
 		if !bytes.Equal(header.Extra[extraVanity:extraSuffix], byteMasterNodes) {
@@ -533,6 +530,40 @@ func (c *Posv) YourTurn(chain consensus.ChainReader, parent *types.Header, signe
 	return len(masternodes), preIndex, curIndex, false, nil
 }
 
+func (c *Posv) UpdateSigners(chain consensus.ChainReader, header *types.Header) ([]common.Address, error) {
+	number := header.Number.Uint64()
+	if number%c.config.Epoch != 0 || c.HookUpdateSigners == nil {
+		return []common.Address{}, nil
+	}
+	ms, err := c.HookUpdateSigners()
+	if err != nil {
+		return []common.Address{}, err
+	}
+	var masternodes []common.Address
+	newMasternodes := make(map[common.Address]struct{})
+	for _, m := range ms {
+		masternodes = append(masternodes, m.Address)
+		newMasternodes[m.Address] = struct{}{}
+	}
+	err = c.UpdateSnapshotWithNewSigners(chain, number-1, header.ParentHash, newMasternodes)
+	if err != nil {
+		return []common.Address{}, err
+	}
+	return masternodes, nil
+}
+
+// Update snapshot with new masternodes set from checkpoint header
+func (c *Posv) UpdateSnapshotWithNewSigners(chain consensus.ChainReader, number uint64, hash common.Hash, signers map[common.Address]struct{}) error {
+	snap, err := c.snapshot(chain, number, hash, nil)
+	if err != nil {
+		return err
+	}
+	snap.Signers = signers
+	c.recents.Add(snap.Hash, snap)
+	log.Info("New set of masternodes has been updated to snapshot", "number", snap.Number, "hash", snap.Hash)
+	return nil
+}
+
 // snapshot retrieves the authorization snapshot at a given point in time.
 func (c *Posv) snapshot(chain consensus.ChainReader, number uint64, hash common.Hash, parents []*types.Header) (*Snapshot, error) {
 	// Search for a snapshot in memory or on disk for checkpoints
@@ -540,6 +571,7 @@ func (c *Posv) snapshot(chain consensus.ChainReader, number uint64, hash common.
 		headers []*types.Header
 		snap    *Snapshot
 	)
+
 	for snap == nil {
 		// If an in-memory snapshot was found, use that
 		if s, ok := c.recents.Get(hash); ok {
@@ -547,8 +579,14 @@ func (c *Posv) snapshot(chain consensus.ChainReader, number uint64, hash common.
 			break
 		}
 		// If an on-disk checkpoint snapshot can be found, use that
-		// checkpoint snapshot = checkpoint - gap
-		if (number+c.config.Gap)%c.config.Epoch == 0 {
+		// checkpoint snapshot
+		var isCheckpointSnapshot bool
+		if chain.Config().IsTIPRemoveGap(big.NewInt(int64(number))) {
+			isCheckpointSnapshot = number%c.config.Epoch == 0
+		} else {
+			isCheckpointSnapshot = ((number + c.config.Gap) % c.config.Epoch) == 0
+		}
+		if isCheckpointSnapshot {
 			if s, err := loadSnapshot(c.config, c.signatures, c.db, hash); err == nil {
 				log.Trace("Loaded voting snapshot form disk", "number", number, "hash", hash)
 				snap = s
@@ -602,7 +640,13 @@ func (c *Posv) snapshot(chain consensus.ChainReader, number uint64, hash common.
 	c.recents.Add(snap.Hash, snap)
 
 	// If we've generated a new checkpoint snapshot, save to disk
-	if (snap.Number+c.config.Gap)%c.config.Epoch == 0 {
+	var isCheckpointSnapshot bool
+	if chain.Config().IsTIPRemoveGap(big.NewInt(int64(number))) {
+		isCheckpointSnapshot = snap.Number%c.config.Epoch == 0
+	} else {
+		isCheckpointSnapshot = (snap.Number+c.config.Gap)%c.config.Epoch == 0
+	}
+	if isCheckpointSnapshot {
 		if err = snap.store(c.db); err != nil {
 			return nil, err
 		}
@@ -754,32 +798,6 @@ func (c *Posv) Prepare(chain consensus.ChainReader, header *types.Header) error 
 	header.Nonce = types.BlockNonce{}
 
 	number := header.Number.Uint64()
-	// Assemble the voting snapshot to check which votes make sense
-	snap, err := c.snapshot(chain, number-1, header.ParentHash, nil)
-	if err != nil {
-		return err
-	}
-	if number%c.config.Epoch != 0 {
-		c.lock.RLock()
-
-		// Gather all the proposals that make sense voting on
-		addresses := make([]common.Address, 0, len(c.proposals))
-		for address, authorize := range c.proposals {
-			if snap.validVote(address, authorize) {
-				addresses = append(addresses, address)
-			}
-		}
-		// If there's pending proposals, cast a vote on them
-		if len(addresses) > 0 {
-			header.Coinbase = addresses[rand.Intn(len(addresses))]
-			if c.proposals[header.Coinbase] {
-				copy(header.Nonce[:], nonceAuthVote)
-			} else {
-				copy(header.Nonce[:], nonceDropVote)
-			}
-		}
-		c.lock.RUnlock()
-	}
 	parent := chain.GetHeader(header.ParentHash, number-1)
 	if parent == nil {
 		return consensus.ErrUnknownAncestor
@@ -792,8 +810,26 @@ func (c *Posv) Prepare(chain consensus.ChainReader, header *types.Header) error 
 		header.Extra = append(header.Extra, bytes.Repeat([]byte{0x00}, extraVanity-len(header.Extra))...)
 	}
 	header.Extra = header.Extra[:extraVanity]
-	masternodes := snap.GetSigners()
 	if number >= c.config.Epoch && number%c.config.Epoch == 0 {
+		var masternodes []common.Address
+		if chain.Config().IsTIPRemoveGap(header.Number) {
+			ms, err := c.HookUpdateSigners()
+			if err != nil {
+				return err
+			}
+			for _, m := range ms {
+				masternodes = append(masternodes, m.Address)
+			}
+			if len(masternodes) == 0 {
+				log.Crit("Error when update masternodes set to snapshot. Stopping node", "number", number)
+			}
+		} else {
+			snap, err := c.snapshot(chain, number-1, header.ParentHash, nil)
+			if err != nil {
+				return err
+			}
+			masternodes = snap.GetSigners()
+		}
 		if c.HookPenalty != nil || c.HookPenaltyTIPSigning != nil {
 			var penMasternodes []common.Address = nil
 			var err error = nil
@@ -820,8 +856,13 @@ func (c *Posv) Prepare(chain consensus.ChainReader, header *types.Header) error 
 				masternodes = RemovePenaltiesFromBlock(chain, masternodes, number-uint64(i)*c.config.Epoch)
 			}
 		}
-		for _, masternode := range masternodes {
-			header.Extra = append(header.Extra, masternode[:]...)
+
+		// signers retrieves the list of authorized signers in ascending order, same function snapshot.GetSigners()
+		sort.Slice(masternodes, func(i, j int) bool {
+			return bytes.Compare(masternodes[i][:], masternodes[j][:]) < 0
+		})
+		for i := 0; i < len(masternodes); i++ {
+			header.Extra = append(header.Extra, masternodes[i][:]...)
 		}
 		if c.HookValidator != nil {
 			validators, err := c.HookValidator(header, masternodes)
@@ -845,28 +886,6 @@ func (c *Posv) Prepare(chain consensus.ChainReader, header *types.Header) error 
 	return nil
 }
 
-func (c *Posv) UpdateMasternodes(chain consensus.ChainReader, header *types.Header, ms []Masternode) error {
-	number := header.Number.Uint64()
-	log.Trace("take snapshot", "number", number, "hash", header.Hash())
-	// get snapshot
-	snap, err := c.snapshot(chain, number, header.Hash(), nil)
-	if err != nil {
-		return err
-	}
-	newMasternodes := make(map[common.Address]struct{})
-	for _, m := range ms {
-		newMasternodes[m.Address] = struct{}{}
-	}
-	snap.Signers = newMasternodes
-	nm := []string{}
-	for _, n := range ms {
-		nm = append(nm, n.Address.String())
-	}
-	c.recents.Add(snap.Hash, snap)
-	log.Info("New set of masternodes has been updated to snapshot", "number", snap.Number, "hash", snap.Hash, "new masternodes", nm)
-	return nil
-}
-
 // Finalize implements consensus.Engine, ensuring no uncles are set, nor block
 // rewards given, and returns the final block.
 func (c *Posv) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
@@ -875,7 +894,6 @@ func (c *Posv) Finalize(chain consensus.ChainReader, header *types.Header, state
 	rCheckpoint := chain.Config().Posv.RewardCheckpoint
 
 	// _ = c.CacheData(header, txs, receipts)
-
 	if c.HookReward != nil && number%rCheckpoint == 0 {
 		err, rewards := c.HookReward(chain, state, header)
 		if err != nil {
@@ -983,6 +1001,11 @@ func (c *Posv) Seal(chain consensus.ChainReader, block *types.Block, stop <-chan
 	}
 	if m2 == signer {
 		header.Validator = sighash
+		if number%c.config.Epoch == 0 {
+			if signers, err := c.UpdateSigners(chain, header); len(signers) == 0 || err != nil {
+				log.Crit("Error when update masternodes set to snapshot. Stopping node", "number", number)
+			}
+		}
 	}
 	return block.WithSeal(header), nil
 }

@@ -372,7 +372,7 @@ func (self *worker) wait() {
 					core.CheckpointCh <- 1
 				}
 				// prepare set of masternodes for the next epoch
-				if (block.NumberU64() % work.config.Posv.Epoch) == (work.config.Posv.Epoch - work.config.Posv.Gap) {
+				if !work.config.IsTIPRemoveGap(block.Number()) && (block.NumberU64() % work.config.Posv.Epoch) == (work.config.Posv.Epoch - work.config.Posv.Gap) {
 					err := self.chain.UpdateM1()
 					if err != nil {
 						log.Error("Error when update masternodes set. Stopping node", "err", err)

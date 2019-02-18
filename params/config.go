@@ -225,6 +225,10 @@ func (c *ChainConfig) IsTIPRandomize(num *big.Int) bool {
 	return isForked(common.TIPRandomize, num)
 }
 
+func (c *ChainConfig) IsTIPRemoveGap(num *big.Int) bool {
+	return isForked(common.TIPRemoveGap, num)
+}
+
 // GasTable returns the gas table corresponding to the current phase (homestead or homestead reprice).
 //
 // The returned GasTable's fields shouldn't, under any circumstances, be changed.

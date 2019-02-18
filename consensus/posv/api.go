@@ -87,14 +87,3 @@ func (api *API) GetSignersAtHash(hash common.Hash) ([]common.Address, error) {
 	return snap.GetSigners(), nil
 }
 
-// Proposals returns the current proposals the node tries to uphold and vote on.
-func (api *API) Proposals() map[common.Address]bool {
-	api.posv.lock.RLock()
-	defer api.posv.lock.RUnlock()
-
-	proposals := make(map[common.Address]bool)
-	for address, auth := range api.posv.proposals {
-		proposals[address] = auth
-	}
-	return proposals
-}

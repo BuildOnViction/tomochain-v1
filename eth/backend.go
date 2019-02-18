@@ -25,7 +25,9 @@ import (
 	"github.com/ethereum/go-ethereum/eth/filters"
 	"github.com/ethereum/go-ethereum/rlp"
 	"math/big"
+	"os"
 	"runtime"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -53,6 +55,8 @@ import (
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
+	contractValidator "github.com/ethereum/go-ethereum/contracts/validator/contract"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 )
 
 type LesServer interface {
@@ -279,7 +283,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 				log.Crit("Can't get state at head of canonical chain", "head number", eth.blockchain.CurrentHeader().Number.Uint64(), "err", err)
 			}
 			prevEpoc := blockNumberEpoc - chain.Config().Posv.Epoch
-			if prevEpoc >= 0 {
+			if prevEpoc > 0 {
 				start := time.Now()
 				prevHeader := chain.GetHeaderByNumber(prevEpoc)
 				penSigners := c.GetMasternodes(chain, prevHeader)
@@ -326,7 +330,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 			if header.Number.Uint64() > comebackLength {
 				combackEpoch = header.Number.Uint64() - comebackLength
 			}
-			if prevEpoc >= 0 {
+			if prevEpoc > 0 {
 				start := time.Now()
 
 				listBlockHash := make([]common.Hash, chain.Config().Posv.Epoch)
@@ -482,6 +486,60 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 			}
 			return nil, rewards
 		}
+
+		// Hook update top 150 candidates
+		c.HookUpdateSigners = func() ([]posv.Masternode, error) {
+			log.Info("It's time to update new set of masternodes for the next epoch...")
+			start := time.Now()
+			client, err := eth.blockchain.GetClient()
+			if err != nil {
+				return []posv.Masternode{}, err
+			}
+			addr := common.HexToAddress(common.MasternodeVotingSMC)
+			validator, err := contractValidator.NewTomoValidator(addr, client)
+			if err != nil {
+				return []posv.Masternode{}, err
+			}
+			opts := new(bind.CallOpts)
+			candidates, err := validator.GetCandidates(opts)
+			if err != nil {
+				log.Error("No masternode found. Stopping node", "err", err)
+				os.Exit(1)
+			}
+			ms := []posv.Masternode{}
+			for _, candidate := range candidates {
+				v, err := validator.GetCandidateCap(opts, candidate)
+				if err != nil {
+					return []posv.Masternode{}, err
+				}
+				//TODO: smart contract shouldn't return "0x0000000000000000000000000000000000000000"
+				if candidate.String() != "0x0000000000000000000000000000000000000000" {
+					ms = append(ms, posv.Masternode{Address: candidate, Stake: v})
+				}
+			}
+			if len(ms) == 0 {
+				log.Error("No masternode found. Stopping node")
+				os.Exit(1)
+			} else {
+				sort.Slice(ms, func(i, j int) bool {
+					return ms[i].Stake.Cmp(ms[j].Stake) >= 0
+				})
+				log.Info("Ordered list of masternode candidates")
+				for _, m := range ms {
+					log.Info("", "address", m.Address.String(), "stake", m.Stake)
+				}
+				// update masternodes
+				log.Info("Updating new set of masternodes")
+				log.Debug("Time Calculated HookUpdateSigners ", "time", common.PrettyDuration(time.Since(start)))
+				if len(ms) > common.MaxMasternodes {
+					return ms[:common.MaxMasternodes], nil
+				} else {
+					return ms, nil
+				}
+			}
+			return []posv.Masternode{}, nil
+		}
+
 
 		// Hook verifies masternodes set
 		c.HookVerifyMNs = func(header *types.Header, signers []common.Address) error {

@@ -136,12 +136,6 @@ web3._extend({
 			call: 'posv_getSignersAtHash',
 			params: 1
 		}),
-	],
-	properties: [
-		new web3._extend.Property({
-			name: 'proposals',
-			getter: 'posv_proposals'
-		}),
 	]
 });
 `

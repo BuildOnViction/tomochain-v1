@@ -167,10 +167,6 @@ func (w *wizard) makeGenesis() {
 		genesis.Config.Posv.RewardCheckpoint = epochNumber
 
 		fmt.Println()
-		fmt.Println("How many blocks before checkpoint need to prepare new set of masternodes? (default = 450)")
-		genesis.Config.Posv.Gap = uint64(w.readDefaultInt(450))
-
-		fmt.Println()
 		fmt.Println("What is foundation wallet address? (default = 0x0000000000000000000000000000000000000068)")
 		genesis.Config.Posv.FoudationWalletAddr = w.readDefaultAddress(common.HexToAddress(common.FoudationAddr))
 

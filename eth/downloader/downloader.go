@@ -1327,11 +1327,16 @@ func (d *Downloader) processFullSyncContent(height uint64) error {
 		}
 		if d.blockchain.Config() != nil && d.blockchain.Config().Posv != nil {
 			epoch := d.blockchain.Config().Posv.Epoch
-			gap := d.blockchain.Config().Posv.Gap
+			var isGapBlock bool
 			inserts := []*fetchResult{}
 			for i := 0; i < len(results); i++ {
 				number := results[i].Header.Number.Uint64() % epoch
-				if number == 0 || number == epoch-1 || number == epoch-gap {
+				if d.blockchain.Config().IsTIPRemoveGap(results[i].Header.Number) {
+					isGapBlock = false
+				} else {
+					isGapBlock = number == epoch - d.blockchain.Config().Posv.Gap
+				}
+				if number == 0 || number == epoch-1 || isGapBlock {
 					inserts = append(inserts, results[i])
 					if d.chainInsertHook != nil {
 						d.chainInsertHook(inserts)
