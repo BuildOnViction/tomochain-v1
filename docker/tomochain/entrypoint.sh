@@ -28,7 +28,7 @@ accountsCount=$(
 
 # file to env
 for env in IDENTITY PASSWORD PRIVATE_KEY BOOTNODES WS_SECRET NETSTATS_HOST \
-           NETSTATS_PORT EXTIP SYNC_MODE NETWORK_ID ANNOUNCE_TXS STORE_REWARD; do
+           NETSTATS_PORT EXTIP SYNC_MODE NETWORK_ID ANNOUNCE_TXS STORE_REWARD DEBUG_MODE; do
   file=$(eval echo "\$${env}_FILE")
   if [[ -f $file ]] && [[ ! -z $file ]]; then
     echo "Replacing $env by $file"
@@ -55,7 +55,7 @@ if [[ ! -z $NETWORK_ID ]]; then
       ;;
     89 )
       genesisPath="testnet.json"
-      params="$params --tomo-testnet"
+      params="$params --tomo-testnet --gcmode archive --rpcapi db,eth,net,web3,personal,debug"
       ;;
     90 )
       genesisPath="devnet.json"
@@ -150,6 +150,11 @@ if [[ ! -z $STORE_REWARD ]]; then
   params="$params --store-reward"
 fi
 
+# debug mode
+if [[ ! -z $DEBUG_MODE ]]; then
+  params="$params --gcmode archive --rpcapi db,eth,net,web3,personal,debug"
+fi
+
 # dump
 echo "dump: $IDENTITY $account $BOOTNODES"
 
@@ -175,6 +180,6 @@ exec tomo $params \
   --wsport 8546 \
   --wsorigins "*" \
   --mine \
-  --gasprice "2500" \
+  --gasprice "250000000" \
   --targetgaslimit "84000000" \
   "$@"

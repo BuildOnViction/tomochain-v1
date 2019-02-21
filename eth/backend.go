@@ -424,9 +424,17 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 
 		eth.txPool.IsMasterNode = func(address common.Address) bool {
 			currentHeader := eth.blockchain.CurrentHeader()
-			snap, err := c.GetSnapshot(eth.blockchain, currentHeader)
+			header := currentHeader
+			// Sometimes, the latest block hasn't been inserted to chain yet
+			// getSnapshot from parent block if it exists
+			parentHeader := eth.blockchain.GetHeader(currentHeader.ParentHash, currentHeader.Number.Uint64()-1)
+			if parentHeader != nil {
+				// not genesis block
+				header = parentHeader
+			}
+			snap, err := c.GetSnapshot(eth.blockchain, header)
 			if err != nil {
-				log.Error("Can't get snapshot with current header ", "number", currentHeader.Number, "hash", currentHeader.Hash().Hex(), "err", err)
+				log.Error("Can't get snapshot with at ", "number", header.Number, "hash", header.Hash().Hex(), "err", err)
 				return false
 			}
 			if _, ok := snap.Signers[address]; ok {
@@ -615,6 +623,28 @@ func (s *Ethereum) ValidateMasternode() (bool, error) {
 	return true, nil
 }
 
+// ValidateMasternodeTestNet checks if node's address is in set of masternodes in Testnet
+func (s *Ethereum) ValidateMasternodeTestnet() (bool, error) {
+	eb, err := s.Etherbase()
+	if err != nil {
+		return false, err
+	}
+	if s.chainConfig.Posv == nil {
+		return false, fmt.Errorf("Only verify masternode permission in PoSV protocol")
+	}
+	masternodes := []common.Address{
+		common.HexToAddress("0xfFC679Dcdf444D2eEb0491A998E7902B411CcF20"),
+		common.HexToAddress("0xd76fd76F7101811726DCE9E43C2617706a4c45c8"),
+		common.HexToAddress("0x8A97753311aeAFACfd76a68Cf2e2a9808d3e65E8"),
+	}
+	for _, m := range masternodes {
+		if m == eb {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (s *Ethereum) StartStaking(local bool) error {
 	eb, err := s.Etherbase()
 	if err != nil {
@@ -754,4 +784,8 @@ func rewardInflation(chainReward *big.Int, number uint64, blockPerYear uint64) *
 	}
 
 	return chainReward
+}
+
+func (s *Ethereum) GetPeer() int {
+	return len(s.protocolManager.peers.peers)
 }
