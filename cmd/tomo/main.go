@@ -124,6 +124,7 @@ var (
 		configFileFlag,
 		utils.AnnounceTxsFlag,
 		utils.StoreRewardFlag,
+		utils.StoreCandidatesFlag,
 		utils.RollbackFlag,
 	}
 

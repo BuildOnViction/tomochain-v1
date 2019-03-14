@@ -5486,6 +5486,12 @@ var methods = function () {
       params: 2,
       inputFormatter: [formatters.inputAddressFormatter, formatters.inputEpochNumberFormatter]
     });
+    var getCandidates = new Method({
+      name: 'getCandidates',
+      call: 'eth_getCandidates',
+      params: 1,
+      inputFormatter: [formatters.inputEpochNumberFormatter]
+    });
     return [
         getBalance,
         getStorageAt,
@@ -5494,6 +5500,7 @@ var methods = function () {
         getBlockSigners,
         getBlockFinality,
         getCandidateStatus,
+        getCandidates,
         getUncle,
         getCompilers,
         getBlockTransactionCount,

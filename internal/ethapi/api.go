@@ -19,15 +19,19 @@ package ethapi
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"math/big"
+	"os"
+	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -35,7 +39,6 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/consensus/posv"
 	"github.com/ethereum/go-ethereum/contracts"
-	contractValidator "github.com/ethereum/go-ethereum/contracts/validator/contract"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
@@ -55,7 +58,15 @@ const (
 	statusMasternode = "MASTERNODE"
 	statusSlashed    = "SLASHED"
 	statusProposed   = "PROPOSED"
+
+	fieldStatus     = "status"
+	fieldCapacity   = "capacity"
+	fieldCandidates = "candidates"
+	fieldEpoch      = "epoch"
+	fieldSuccess    = "success"
 )
+
+var errEmptyHeader = errors.New("empty header")
 
 // PublicEthereumAPI provides an API to access Ethereum related information.
 // It offers only methods that operate on public data that is freely available to anyone.
@@ -699,110 +710,301 @@ func (s *PublicBlockChainAPI) GetMasternodes(ctx context.Context, b *types.Block
 	return masternodes, nil
 }
 
-// GetCandidateStatus returns status of the given candidate at a specified epochNumber
-func (s *PublicBlockChainAPI) GetCandidateStatus(ctx context.Context, coinbaseAddress common.Address, epochNumber rpc.EpochNumber) (string, error) {
+/** GetCandidateStatus returns status of the given candidate at a specified epochNumber
+	@param ctx context.Context
+	@param coinbaseAddress common.Address
+	@param epochNumber rpc.EpochNumber
+	@return
+		map[string]interface{} {
+			"status"	: "MASTERNODE",
+			"epoch"		: 1,
+			"capacity"	: 50000,
+			"success"	: true,
+		}
+		error
+**/
+func (s *PublicBlockChainAPI) GetCandidateStatus(ctx context.Context, coinbaseAddress common.Address, epoch rpc.EpochNumber) (map[string]interface{}, error) {
 	var (
 		block                    *types.Block
+		header                   *types.Header
+		checkpointNumber         rpc.BlockNumber
+		epochNumber              rpc.EpochNumber // if epoch == "latest", print the latest epoch number to epochNumber
 		masternodes, penaltyList []common.Address
+		candidates               []posv.Masternode
 		penalties                []byte
 		err                      error
 	)
-	block = s.b.CurrentBlock()
-	epoch := s.b.ChainConfig().Posv.Epoch
-	// TODO: we currently support the latest epoch only
-	//if epochNumber == rpc.LatestEpochNumber {
-	//	block = s.b.CurrentBlock()
-	//} else {
-	//	checkpointNumber := rpc.BlockNumber((uint64(epochNumber) - 1) * epoch)
-	//	if checkpointNumber < 0 {
-	//		checkpointNumber = 0
-	//	}
-	//	block, err = s.b.BlockByNumber(ctx, checkpointNumber)
-	//	if err != nil || block == nil {
-	//		return "", err
-	//	}
-	//}
-	blockNum := block.Number().Uint64()
-	masternodes, err = s.GetMasternodes(ctx, block)
-	if err != nil || len(masternodes) == 0 {
-		log.Error("Failed to get masternodes", "err", err, "len(masternodes)", len(masternodes))
-		return "", err
-	}
-	for _, masternode := range masternodes {
-		if coinbaseAddress == masternode {
-			return statusMasternode, nil
-		}
+	result := map[string]interface{}{
+		fieldStatus:   "",
+		fieldCapacity: 0,
+		fieldSuccess:  true,
 	}
 
-	// read smart contract to get candidate list
-	client, err := s.b.GetIPCClient()
-	if err != nil {
-		return "", err
+	epochConfig := s.b.ChainConfig().Posv.Epoch
+	// checkpoint block
+	checkpointNumber, epochNumber = s.GetPreviousCheckpointFromEpoch(ctx, epoch)
+	result[fieldEpoch] = epochNumber.Int64()
+	block, err = s.b.BlockByNumber(ctx, checkpointNumber)
+	if err != nil || block == nil || checkpointNumber == 0 {
+		result[fieldSuccess] = false
+		return result, err
 	}
-	addr := common.HexToAddress(common.MasternodeVotingSMC)
-	validator, err := contractValidator.NewTomoValidator(addr, client)
-	if err != nil {
-		return "", err
+	header = block.Header()
+	if header == nil {
+		log.Error("Empty header at checkpoint ", "num", checkpointNumber)
+		return result, errEmptyHeader
 	}
-	opts := new(bind.CallOpts)
-	var (
-		candidateAddresses []common.Address
-		candidates         []posv.Masternode
-	)
-
-	candidateAddresses, err = validator.GetCandidates(opts)
-	if err != nil {
-		return "", err
+	if epoch == rpc.LatestEpochNumber {
+		candidates, err = s.getCandidatesFromSmartContract()
+	} else {
+		candidates, err = getCandidatesFromFile(header)
 	}
-	for _, address := range candidateAddresses {
-		v, err := validator.GetCandidateCap(opts, address)
-		if err != nil {
-			return "", err
-		}
-		if address.String() != "0x0000000000000000000000000000000000000000" {
-			candidates = append(candidates, posv.Masternode{Address: address, Stake: v})
-		}
+	if err != nil || len(candidates) == 0 {
+		log.Debug("Candidates list cannot be found", "len(candidates)", len(candidates), "err", err)
+		result[fieldSuccess] = false
+		return result, err
 	}
-	// sort candidates by stake descending
-	sort.Slice(candidates, func(i, j int) bool {
-		return candidates[i].Stake.Cmp(candidates[j].Stake) >= 0
-	})
-	isTopCandidate := false // is candidates in top 150
-	status := ""
+	isTopCandidate := false
+	// check penalties from checkpoint headers and modify status of a node to SLASHED if it's in top 150 candidates
+	// if it's SLASHED but it's out of top 150, the status should be still PROPOSED
 	for i := 0; i < len(candidates); i++ {
-		if candidates[i].Address == coinbaseAddress {
-			status = statusProposed
+		if coinbaseAddress == candidates[i].Address {
 			if i < common.MaxMasternodes {
 				isTopCandidate = true
 			}
+			result[fieldStatus] = statusProposed
+			result[fieldCapacity] = candidates[i].Stake
 			break
 		}
 	}
+
 	if !isTopCandidate {
-		return status, nil
+		return result, nil
 	}
-	// look up recent checkpoint headers to get penalty list
-	for i := 0; i <= common.LimitPenaltyEpoch; i++ {
-		if blockNum > uint64(i)*epoch {
-			blockCheckpointNumber := rpc.BlockNumber(blockNum - (blockNum % epoch) - (uint64(i) * epoch))
-			blockCheckpoint, err := s.b.BlockByNumber(ctx, blockCheckpointNumber)
-			if err != nil {
-				log.Error("Failed to get block  by number", "num", blockCheckpointNumber, "err", err)
-				continue
-			}
-			penalties = append(penalties, blockCheckpoint.Penalties()...)
+
+	masternodes, err = s.GetMasternodes(ctx, block)
+	if err != nil || len(masternodes) == 0 {
+		log.Error("Failed to get masternodes", "err", err, "len(masternodes)", len(masternodes), "blockNum", header.Number.Uint64())
+		result[fieldSuccess] = false
+		return result, err
+	}
+	for _, masternode := range masternodes {
+		if coinbaseAddress == masternode {
+			result[fieldStatus] = statusMasternode
+			return result, nil
 		}
 	}
 
-	if len(penalties) > 0 {
-		penaltyList = common.ExtractAddressFromBytes(penalties)
-		for _, pen := range penaltyList {
-			if coinbaseAddress == pen {
-				return statusSlashed, nil
+	// look up recent checkpoint headers to get penalty list
+	penalties = append(penalties, header.Penalties...)
+	for i := 1; i <= common.LimitPenaltyEpoch; i++ {
+		if header.Number.Uint64() < epochConfig*uint64(i) {
+			break
+		}
+		blockNum := header.Number.Uint64() - epochConfig*uint64(i)
+
+		checkpointHeader, err := s.b.HeaderByNumber(ctx, rpc.BlockNumber(blockNum))
+		if checkpointHeader == nil || err != nil {
+			log.Error("Failed to get header by number", "num", blockNum, "err", err)
+			continue
+		}
+		penalties = append(penalties, checkpointHeader.Penalties...)
+	}
+
+	if len(penalties) == 0 {
+		return result, nil
+	}
+
+	penaltyList = common.ExtractAddressFromBytes(penalties)
+
+	for _, pen := range penaltyList {
+		if coinbaseAddress == pen {
+			result[fieldStatus] = statusSlashed
+			return result, nil
+		}
+	}
+
+	return result, nil
+}
+
+/** GetCandidates returns status of all candidates at a specified epochNumber
+	@param ctx context.Context
+	@param epochNumber rpc.EpochNumber
+	@return
+		map[string]interface{} {
+			"epoch"		: 1,
+			"candidates": {
+				"0x....": {
+					"status"	: "MASTERNODE"
+					"capacity"	: 50000,
+				}
+			}
+			"success"	: true,
+		}
+		error
+**/
+func (s *PublicBlockChainAPI) GetCandidates(ctx context.Context, epoch rpc.EpochNumber) (map[string]interface{}, error) {
+	var (
+		block                    *types.Block
+		header                   *types.Header
+		checkpointNumber         rpc.BlockNumber
+		epochNumber              rpc.EpochNumber // if epoch == "latest", print the latest epoch number to epochNumber
+		masternodes, penaltyList []common.Address
+		candidates               []posv.Masternode
+		penalties                []byte
+		err                      error
+	)
+	result := map[string]interface{}{
+		fieldSuccess: true,
+	}
+	candidatesStatusMap := map[string]map[string]interface{}{}
+	epochConfig := s.b.ChainConfig().Posv.Epoch
+	// checkpoint number
+	checkpointNumber, epochNumber = s.GetPreviousCheckpointFromEpoch(ctx, epoch)
+	result[fieldEpoch] = epochNumber.Int64()
+	block, err = s.b.BlockByNumber(ctx, checkpointNumber)
+	if err != nil || block == nil || checkpointNumber == 0 {
+		result[fieldSuccess] = false
+		return result, err
+	}
+	header = block.Header()
+	if header == nil {
+		log.Error("Empty header at checkpoint ", "num", checkpointNumber)
+		return result, errEmptyHeader
+	}
+	if epoch == rpc.LatestEpochNumber {
+		candidates, err = s.getCandidatesFromSmartContract()
+	} else {
+		candidates, err = getCandidatesFromFile(header)
+	}
+	if err != nil || len(candidates) == 0 {
+		log.Debug("Candidates list cannot be found", "len(candidates)", len(candidates), "err", err)
+		result[fieldSuccess] = false
+		return result, err
+	}
+
+	for _, candidate := range candidates {
+		candidatesStatusMap[candidate.Address.String()] = map[string]interface{}{
+			fieldStatus:   statusProposed,
+			fieldCapacity: candidate.Stake,
+		}
+	}
+
+	masternodes, err = s.GetMasternodes(ctx, block)
+	if err != nil || len(masternodes) == 0 {
+		log.Error("Failed to get masternodes", "err", err, "len(masternodes)", len(masternodes), "blockNum", header.Number.Uint64())
+		result[fieldSuccess] = false
+		return result, err
+	}
+	for _, masternode := range masternodes {
+		if candidatesStatusMap[masternode.String()] != nil {
+			candidatesStatusMap[masternode.String()][fieldStatus] = statusMasternode
+		}
+	}
+
+	// look up recent checkpoint headers to get penalty list
+	penalties = append(penalties, header.Penalties...)
+	for i := 1; i <= common.LimitPenaltyEpoch; i++ {
+		if header.Number.Uint64() < epochConfig*uint64(i) {
+			break
+		}
+		blockNum := header.Number.Uint64() - epochConfig*uint64(i)
+		checkpointHeader, err := s.b.HeaderByNumber(ctx, rpc.BlockNumber(blockNum))
+		if checkpointHeader == nil || err != nil {
+			log.Error("Failed to get header by number", "num", blockNum, "err", err)
+			continue
+		}
+		penalties = append(penalties, checkpointHeader.Penalties...)
+	}
+	if len(penalties) == 0 {
+		result[fieldCandidates] = candidatesStatusMap
+		return result, nil
+	}
+
+	penaltyList = common.ExtractAddressFromBytes(penalties)
+	var topCandidates []posv.Masternode
+	if len(candidates) > common.MaxMasternodes {
+		topCandidates = candidates[:common.MaxMasternodes]
+	} else {
+		topCandidates = candidates
+	}
+	// check penalties from checkpoint headers and modify status of a node to SLASHED if it's in top 150 candidates
+	// if it's SLASHED but it's out of top 150, the status should be still PROPOSED
+	for _, pen := range penaltyList {
+		for _, candidate := range topCandidates {
+			if candidate.Address == pen && candidatesStatusMap[pen.String()] != nil {
+				candidatesStatusMap[pen.String()][fieldStatus] = statusSlashed
 			}
 		}
 	}
-	return status, nil
+	result[fieldCandidates] = candidatesStatusMap
+	return result, nil
+}
+
+// GetPreviousCheckpointFromEpoch returns header of the previous checkpoint
+func (s *PublicBlockChainAPI) GetPreviousCheckpointFromEpoch(ctx context.Context, epochNum rpc.EpochNumber) (rpc.BlockNumber, rpc.EpochNumber) {
+	var checkpointNumber uint64
+	epoch := s.b.ChainConfig().Posv.Epoch
+
+	if epochNum == rpc.LatestEpochNumber {
+		blockNum := s.b.CurrentBlock().Number().Uint64()
+		diff := blockNum % epoch
+		// checkpoint number
+		checkpointNumber = blockNum - diff
+		epochNum = rpc.EpochNumber(checkpointNumber / epoch)
+		if diff > 0 {
+			epochNum += 1
+		}
+	} else if epochNum < 2 {
+		checkpointNumber = 0
+	} else {
+		checkpointNumber = epoch * (uint64(epochNum) - 1)
+	}
+	return rpc.BlockNumber(checkpointNumber), epochNum
+}
+
+// getCandidatesFromFile returns all candidates with their capacities at the previous checkpoint block
+func getCandidatesFromFile(header *types.Header) ([]posv.Masternode, error) {
+	var (
+		candidates []posv.Masternode
+		data       []byte
+		err        error
+	)
+	if _, err := os.Stat(common.StoreCandidateFolder); err != nil {
+		log.Debug("StoreCandidates folder not found!", "folder", common.StoreCandidateFolder, "err", err)
+		return candidates, err
+	}
+	fileName := filepath.Join(common.StoreCandidateFolder, strconv.FormatUint(header.Number.Uint64(), 10)) + "." + header.Hash().Hex()
+	data, err = ioutil.ReadFile(fileName)
+	if err == nil {
+		err = json.Unmarshal(data, &candidates)
+		if err != nil {
+			log.Debug("Failed to unmarshal candidates from file", "data", data, "err", err)
+		}
+	} else {
+		log.Debug("Failed to get candidates from file", "filename", fileName)
+	}
+	if len(candidates) > 0 {
+		// sort candidates by stake descending
+		sort.Slice(candidates, func(i, j int) bool {
+			return candidates[i].Stake.Cmp(candidates[j].Stake) >= 0
+		})
+	}
+	return candidates, err
+}
+
+// getCandidatesFromSmartContract returns all candidates with their capacities at the current time
+func (s *PublicBlockChainAPI) getCandidatesFromSmartContract() ([]posv.Masternode, error) {
+	if engine, ok := s.b.GetEngine().(*posv.Posv); ok {
+		_, candidates, err := engine.HookUpdateSigners()
+		if err != nil {
+			return []posv.Masternode{}, err
+		}
+		return candidates, nil
+	} else {
+		log.Error("Unable to load candidates from smart contract, undefined POSV consensus engine")
+	}
+	return []posv.Masternode{}, nil
 }
 
 // CallArgs represents the arguments for a call.

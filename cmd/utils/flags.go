@@ -127,6 +127,10 @@ var (
 		Name:  "store-reward",
 		Usage: "Store reward to file",
 	}
+	StoreCandidatesFlag = cli.BoolFlag{
+		Name:  "store-candidates",
+		Usage: "Store candidates list to file",
+	}
 	DataDirFlag = DirectoryFlag{
 		Name:  "datadir",
 		Usage: "Data directory for the databases and keystore",
@@ -1096,6 +1100,13 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 		common.StoreRewardFolder = filepath.Join(stack.DataDir(), "tomo", "rewards")
 		if _, err := os.Stat(common.StoreRewardFolder); os.IsNotExist(err) {
 			os.Mkdir(common.StoreRewardFolder, os.ModePerm)
+		}
+	}
+
+	if ctx.GlobalIsSet(StoreCandidatesFlag.Name) {
+		common.StoreCandidateFolder = filepath.Join(stack.DataDir(), "tomo", "candidates")
+		if _, err := os.Stat(common.StoreCandidateFolder); os.IsNotExist(err) {
+			os.Mkdir(common.StoreCandidateFolder, os.ModePerm)
 		}
 	}
 	// Override any default configs for hard coded networks.

@@ -27,5 +27,6 @@ var TIPSigning = big.NewInt(3000000)
 var TIPRandomize = big.NewInt(3464000)
 var IsTestnet bool = false
 var StoreRewardFolder string
+var StoreCandidateFolder string
 var RollbackHash Hash
 var MinGasPrice int64
