@@ -16,6 +16,7 @@ const (
 	Bid    = "BUY"
 	Market = "market"
 	Limit  = "limit"
+	Cancel = "CANCEL"
 
 	// we use a big number as segment for storing order, order list from order tree slot.
 	// as sequential id

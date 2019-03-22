@@ -2,6 +2,7 @@ package tomox
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/tomochain/dex-server/types"
 )
 
 const (
@@ -102,7 +104,7 @@ type newMessageOverride struct {
 }
 
 // Post a message on the TomoX network.
-func (api *PublicTomoXAPI) Post(ctx context.Context, req NewMessage) (bool, error) {
+func (api *PublicTomoXAPI) CreateOrder(ctx context.Context, req NewMessage) (bool, error) {
 	var (
 		err error
 	)
@@ -138,6 +140,47 @@ func (api *PublicTomoXAPI) Post(ctx context.Context, req NewMessage) (bool, erro
 			return false, fmt.Errorf("failed to parse target peer: %s", err)
 		}
 		return true, api.t.SendP2PMessage(n.ID[:], env)
+	}
+
+	return true, api.t.Send(env)
+}
+
+func (api *PublicTomoXAPI) CancelOrder(ctx context.Context, req NewMessage) (bool, error) {
+	params := &MessageParams{
+		TTL:      req.TTL,
+		Payload:  req.Payload,
+		Padding:  req.Padding,
+		WorkTime: req.PowTime,
+		Topic:    req.Topic,
+	}
+	payload := &types.Order{}
+	err := json.Unmarshal(params.Payload, &payload)
+	if err != nil {
+		log.Error("Wrong order payload format", "err", err)
+		return false, err
+	}
+	//set cancel signature to the order payload
+	payload.Type = "CANCEL"
+	//then encode it again
+	params.Payload, err = json.Marshal(payload)
+	if err != nil {
+		log.Error("Can't encode order payload", "err", err)
+		return false, err
+	}
+	if params.Topic == (TopicType{}) {
+		log.Error("Missing topic(s)", "params.Topic", params.Topic)
+		return false, ErrNoTopics
+	}
+
+	// encrypt and sent message
+	tomoXMsg, err := NewSentMessage(params)
+	if err != nil {
+		return false, err
+	}
+
+	env, err := tomoXMsg.Wrap(params)
+	if err != nil {
+		return false, err
 	}
 
 	return true, api.t.Send(env)
@@ -261,9 +304,9 @@ func toMessage(messages []*ReceivedMessage) []*Message {
 	return msgs
 }
 
-// GetFilterMessages returns the messages that match the filter criteria and
+// GetOrders returns the orders that match the filter criteria and
 // are received between the last poll and now.
-func (api *PublicTomoXAPI) GetFilterMessages(id string) ([]*Message, error) {
+func (api *PublicTomoXAPI) GetOrders(id string) ([]*Message, error) {
 	api.mu.Lock()
 	f := api.t.GetFilter(id)
 	if f == nil {
@@ -282,8 +325,8 @@ func (api *PublicTomoXAPI) GetFilterMessages(id string) ([]*Message, error) {
 	return messages, nil
 }
 
-// DeleteMessageFilter deletes a filter.
-func (api *PublicTomoXAPI) DeleteMessageFilter(id string) (bool, error) {
+// DeleteTopic deletes a topic.
+func (api *PublicTomoXAPI) DeleteTopic(id string) (bool, error) {
 	api.mu.Lock()
 	defer api.mu.Unlock()
 
@@ -291,9 +334,9 @@ func (api *PublicTomoXAPI) DeleteMessageFilter(id string) (bool, error) {
 	return true, api.t.Unsubscribe(id)
 }
 
-// NewMessageFilter creates a new filter that can be used to poll for
+// NewTopic creates a new topic that can be used to poll for
 // (new) messages that satisfy the given criteria.
-func (api *PublicTomoXAPI) NewMessageFilter(req Criteria) (string, error) {
+func (api *PublicTomoXAPI) NewTopic(req Criteria) (string, error) {
 	var (
 		topics [][]byte
 		err    error

@@ -40,7 +40,7 @@ const (
 	padSizeLimit         = 256 // just an arbitrary number, could be changed without breaking the protocol
 	flagsLength          = 1
 	SizeMask             = byte(3) // mask used to extract the size of payload size field from the flags
-	TopicLength          = 8       // in bytes
+	TopicLength          = 86      // in bytes
 	keyIDSize            = 32      // in bytes
 	DefaultTradeID       = "1"
 )
@@ -420,20 +420,29 @@ func (tomox *TomoX) postEvent(envelope *Envelope, isP2P bool) error {
 	}
 
 	order := toOrder(payload)
-	log.Info("Save order", "detail", order)
-	trades, orderInBook, err := tomox.ProcessOrder(order)
-	if err != nil {
-		log.Error("Can't process order", "err", err)
-		return err
+	if order["type"] == Cancel {
+		err := tomox.CancelOrder(order)
+		if err != nil {
+			log.Error("Can't cancel order", "err", err)
+			return err
+		}
+		log.Info("Cancelled order", "detail", order)
+	} else {
+		log.Info("Save order", "detail", order)
+		trades, orderInBook, err := tomox.ProcessOrder(order)
+		if err != nil {
+			log.Error("Can't process order", "err", err)
+			return err
+		}
+		log.Info("Orderbook result", "Trade", trades, "OrderInBook", orderInBook)
 	}
-	log.Info("Orderbook result", "Trade", trades, "OrderInBook", orderInBook)
 	return nil
 }
 
 func toOrder(payload *types.Order) map[string]string {
 	order := map[string]string{}
 	order["timestamp"] = strconv.FormatInt(payload.CreatedAt.UnixNano()/int64(time.Millisecond), 10)
-	order["type"] = Market
+	order["type"] = payload.Type
 	order["side"] = payload.Side
 	order["quantity"] = strconv.FormatInt(payload.Amount.Int64(), 10)
 	order["price"] = strconv.FormatInt(payload.PricePoint.Int64(), 10)
