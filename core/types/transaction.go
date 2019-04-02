@@ -309,6 +309,20 @@ func (tx *Transaction) IsSigningTransaction() bool {
 	return true
 }
 
+func (tx *Transaction) IsMatchingTransaction() bool {
+	if tx.To() == nil {
+		return false
+	}
+
+	if tx.To().String() != common.MatchingOrderSMC {
+		return false
+	}
+	if len(tx.Data()) == 0 {
+		return false
+	}
+	return true
+}
+
 func (tx *Transaction) IsVotingTransaction() (bool, *common.Address) {
 	if tx.To() == nil {
 		return false, nil

@@ -17,12 +17,14 @@
 package core
 
 import (
+	"encoding/json"
 	"fmt"
-
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/consensus/posv"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/tomox"
 )
 
 // BlockValidator is responsible for validating block headers, uncles and
@@ -69,6 +71,38 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 	}
 	if hash := types.DeriveSha(block.Transactions()); hash != header.TxHash {
 		return fmt.Errorf("transaction root hash mismatch: have %x, want %x", hash, header.TxHash)
+	}
+
+	// validate matchOrder txs
+	currentState, err := v.bc.State()
+	if err != nil {
+		return err
+	}
+	for _, tx := range block.Transactions() {
+		if !tx.IsMatchingTransaction() {
+			continue
+		}
+		var order tomox.MatchingOrder
+		if err := json.Unmarshal(tx.Data(), &order); err != nil {
+			return err
+		}
+
+		// verify data fields
+		if engine, ok := v.engine.(*posv.Posv); ok {
+			if err := engine.ValidateMatchingOrder(&order, currentState); err != nil {
+				return err
+			}
+			// run Matching Engine and compare to result of M1
+			if tomoX := engine.GetTomoXService(); tomoX != nil {
+				// TODO: run matching engine
+				// TODO: verify Matching engine result and matchedTx
+			} else {
+				return tomox.ErrTomoXServiceNotFound
+			}
+
+		} else {
+			return tomox.ErrUnsupportedEngine
+		}
 	}
 	return nil
 }

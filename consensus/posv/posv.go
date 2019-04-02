@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/tomox"
 	"io/ioutil"
 	"math/big"
 	"math/rand"
@@ -48,9 +49,10 @@ import (
 )
 
 const (
-	inmemorySnapshots      = 128 // Number of recent vote snapshots to keep in memory
-	blockSignersCacheLimit = 9000
-	M2ByteLength           = 4
+	inmemorySnapshots                 = 128 // Number of recent vote snapshots to keep in memory
+	blockSignersCacheLimit            = 9000
+	validatedMatchingOrdersCacheLimit = 50000
+	M2ByteLength                      = 4
 )
 
 type Masternode struct {
@@ -226,6 +228,8 @@ type Posv struct {
 	lock   sync.RWMutex    // Protects the signer fields
 
 	BlockSigners          *lru.Cache
+	ValidatedOrders       *lru.Cache
+	ValidateMatchingOrder func(order *tomox.MatchingOrder, state *state.StateDB) error
 	HookReward            func(chain consensus.ChainReader, state *state.StateDB, header *types.Header) (error, map[string]interface{})
 	HookPenalty           func(chain consensus.ChainReader, blockNumberEpoc uint64) ([]common.Address, error)
 	HookPenaltyTIPSigning func(chain consensus.ChainReader, header *types.Header, candidate []common.Address) ([]common.Address, error)
@@ -243,6 +247,7 @@ func New(config *params.PosvConfig, db ethdb.Database) *Posv {
 	}
 	// Allocate the snapshot caches and create the engine
 	BlockSigners, _ := lru.New(blockSignersCacheLimit)
+	validatedMatchingOrders, _ := lru.New(validatedMatchingOrdersCacheLimit)
 	recents, _ := lru.NewARC(inmemorySnapshots)
 	signatures, _ := lru.NewARC(inmemorySnapshots)
 	validatorSignatures, _ := lru.NewARC(inmemorySnapshots)
@@ -255,6 +260,7 @@ func New(config *params.PosvConfig, db ethdb.Database) *Posv {
 		signatures:          signatures,
 		verifiedHeaders:     verifiedHeaders,
 		validatorSignatures: validatorSignatures,
+		ValidatedOrders:     validatedMatchingOrders,
 		proposals:           make(map[common.Address]bool),
 	}
 }
@@ -1098,6 +1104,13 @@ func (c *Posv) CacheSigner(hash common.Hash, txs []*types.Transaction) []*types.
 
 func (c *Posv) GetDb() ethdb.Database {
 	return c.db
+}
+
+func (c *Posv) IsMatchedOrder(hash common.Hash) bool {
+	if _, ok := c.ValidatedOrders.Get(hash); ok {
+		return true
+	}
+	return false
 }
 
 // Extract validators from byte array.

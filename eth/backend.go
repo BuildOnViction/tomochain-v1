@@ -24,6 +24,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/eth/filters"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/ethereum/go-ethereum/tomox"
 	"math/big"
 	"runtime"
 	"sync"
@@ -507,6 +508,14 @@ func New(ctx *node.ServiceContext, config *Config, tomoXServ *tomox.TomoX) (*Eth
 			}
 			return nil
 		}
+		c.ValidateMatchingOrder = func(order *tomox.MatchingOrder, state *state.StateDB) error {
+			// check whether this order has been matched
+			if c.IsMatchedOrder(order.Hash) {
+				return tomox.ErrDuplicatedMatchingOrder
+			}
+			c.ValidatedOrders.Add(order.Hash, order)
+			return validateMatchingOrder(order, state)
+		}
 
 		eth.txPool.IsSigner = func(address common.Address) bool {
 			currentHeader := eth.blockchain.CurrentHeader()
@@ -876,4 +885,79 @@ func rewardInflation(chainReward *big.Int, number uint64, blockPerYear uint64) *
 
 func (s *Ethereum) GetPeer() int {
 	return len(s.protocolManager.peers.peers)
+}
+func validateMatchingOrder(order *tomox.MatchingOrder, state *state.StateDB) error {
+
+	if err := order.ValidateHash(); err != nil {
+		return err
+	}
+	if err := order.ValidateTimestamp(); err != nil {
+		return err
+	}
+	if err := order.ValidateOrderType(); err != nil {
+		return err
+	}
+	if err := order.ValidateSignature(); err != nil {
+		return err
+	}
+	if err := order.ValidatePrice(); err != nil {
+		return err
+	}
+	if err := order.ValidateQuantity(); err != nil {
+		return err
+	}
+	if err := order.ValidatePairByTokenAddress(); err != nil {
+		return err
+	}
+
+	if err := order.ValidatePairBySymbol(); err != nil {
+		return err
+	}
+	//if err := order.IsSameRelayer(); err != nil {
+	//	return err
+	//}
+	if err := isValidRelayer(order, state); err != nil {
+		return err
+	}
+
+
+	// no need to validate symbol and token address of sellOrder because buyBase == sellQuote, buyQuote == sellBase
+
+	// baseToken/quoteToken : baseToken should be asset, quoteToken should be fund
+	// Buyer has funds >= buyPrice * buyQuantity, Seller has assets >= sellQuantity
+	buyValue := big.NewInt(0)
+	buyValue = buyValue.Mul(order.Buy.Price, order.Buy.Quantity)
+	if err := validateBalance(buyValue, order.Buy.UserAddress, order.Buy.QuoteToken, state); err != nil {
+		return err
+	}
+
+	// validate asset of seller
+	if err := validateBalance(order.Sell.Quantity, order.Sell.UserAddress, order.Sell.BaseToken, state); err != nil {
+		return err
+	}
+	return nil
+}
+
+// valid relayer indicating in smartcontract
+func isValidRelayer(order *tomox.MatchingOrder, state *state.StateDB) error {
+	if !contracts.IsValidRelayer(state, order.Buy.ExchangeAddress) {
+		return tomox.ErrInvalidRelayer
+	}
+	// no need to check SellExchangeAddress because we already validated  order.IsSameRelayer()
+	return nil
+}
+
+func validateBalance(orderValue *big.Int, addr common.Address, tokenAddr common.Address, state *state.StateDB) error {
+	var balance *big.Int
+	if tokenAddr == (common.Address{}) {
+		// native TOMO
+		balance = state.GetBalance(addr)
+	} else {
+		// query balance from tokenContract
+		balance = contracts.GetBalanceOf(state, addr, tokenAddr)
+	}
+	if balance.Cmp(orderValue) < 0 {
+		return tomox.ErrNotEnoughBalance
+	}
+	return nil
 }
