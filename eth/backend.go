@@ -53,6 +53,7 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/ethereum/go-ethereum/tomox"
 )
 
 type LesServer interface {
@@ -96,7 +97,8 @@ type Ethereum struct {
 	networkId     uint64
 	netRPCService *ethapi.PublicNetAPI
 
-	lock sync.RWMutex // Protects the variadic fields (e.g. gas price and etherbase)
+	lock  sync.RWMutex // Protects the variadic fields (e.g. gas price and etherbase)
+	TomoX *tomox.TomoX
 }
 
 func (s *Ethereum) AddLesServer(ls LesServer) {
@@ -106,7 +108,7 @@ func (s *Ethereum) AddLesServer(ls LesServer) {
 
 // New creates a new Ethereum object (including the
 // initialisation of the common Ethereum object)
-func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
+func New(ctx *node.ServiceContext, config *Config, tomoXServ *tomox.TomoX) (*Ethereum, error) {
 	if config.SyncMode == downloader.LightSync {
 		return nil, errors.New("can't run eth.Ethereum in light sync mode, use les.LightEthereum")
 	}
@@ -138,6 +140,11 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		etherbase:      config.Etherbase,
 		bloomRequests:  make(chan chan *bloombits.Retrieval),
 		bloomIndexer:   NewBloomIndexer(chainDb, params.BloomBitsBlocks),
+	}
+
+	// Inject TomoX Service into main Eth Service.
+	if tomoXServ != nil {
+		eth.TomoX = tomoXServ
 	}
 
 	log.Info("Initialising Ethereum protocol", "versions", ProtocolVersions, "network", config.NetworkId)
@@ -382,12 +389,18 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 			return nil
 		}
 
+		c.HookPrepareBlock = func(header *types.Header) error {
+			log.Error("services", "services", eth.TomoX)
+
+			return nil
+		}
+
 		eth.txPool.IsMasterNode = func(address common.Address) bool {
 			currentHeader := eth.blockchain.CurrentHeader()
 			header := currentHeader
 			// Sometimes, the latest block hasn't been inserted to chain yet
 			// getSnapshot from parent block if it exists
-			parentHeader := eth.blockchain.GetHeader(currentHeader.ParentHash, currentHeader.Number.Uint64() - 1)
+			parentHeader := eth.blockchain.GetHeader(currentHeader.ParentHash, currentHeader.Number.Uint64()-1)
 			if parentHeader != nil {
 				// not genesis block
 				header = parentHeader

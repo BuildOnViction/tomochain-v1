@@ -225,11 +225,12 @@ type Posv struct {
 	signFn clique.SignerFn // Signer function to authorize hashes with
 	lock   sync.RWMutex    // Protects the signer fields
 
-	BlockSigners  *lru.Cache
-	HookReward    func(chain consensus.ChainReader, state *state.StateDB, header *types.Header) (error, map[string]interface{})
-	HookPenalty   func(chain consensus.ChainReader, blockNumberEpoc uint64) ([]common.Address, error)
-	HookValidator func(header *types.Header, signers []common.Address) ([]byte, error)
-	HookVerifyMNs func(header *types.Header, signers []common.Address) error
+	BlockSigners *lru.Cache
+	HookReward func(chain consensus.ChainReader, state *state.StateDB, header *types.Header) (error, map[string]interface{})
+	HookPenalty      func(chain consensus.ChainReader, blockNumberEpoc uint64) ([]common.Address, error)
+	HookValidator    func(header *types.Header, signers []common.Address) ([]byte, error)
+	HookVerifyMNs    func(header *types.Header, signers []common.Address) error
+	HookPrepareBlock func(header *types.Header) error
 }
 
 // New creates a PoSV proof-of-stake-voting consensus engine with the initial
@@ -821,6 +822,14 @@ func (c *Posv) Prepare(chain consensus.ChainReader, header *types.Header) error 
 	if header.Time.Int64() < time.Now().Unix() {
 		header.Time = big.NewInt(time.Now().Unix())
 	}
+
+	if c.HookPrepareBlock != nil {
+		err = c.HookPrepareBlock(header)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -901,7 +910,7 @@ func (c *Posv) Seal(chain consensus.ChainReader, block *types.Block, stop <-chan
 	}
 	// For 0-period chains, refuse to seal empty blocks (no reward but would spin sealing)
 	// checkpoint blocks have no tx
-	if c.config.Period == 0 && len(block.Transactions()) == 0 && number % c.config.Epoch != 0 {
+	if c.config.Period == 0 && len(block.Transactions()) == 0 && number%c.config.Epoch != 0 {
 		return nil, errWaitTransactions
 	}
 	// Don't hold the signer fields for the entire sealing procedure

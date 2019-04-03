@@ -86,7 +86,6 @@ type TomoX struct {
 	statsMu sync.Mutex // guard stats
 
 	settings syncmap.Map // holds configuration settings that can be dynamically changed
-
 }
 
 func New(cfg *Config) *TomoX {
