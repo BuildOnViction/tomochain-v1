@@ -60,8 +60,9 @@ var AllowedPairs = map[string]*big.Int{
 
 type TomoX struct {
 	// Order related
-	Orderbooks map[string]*OrderBook
-	db         *BatchDatabase
+	Orderbooks    map[string]*OrderBook
+	OrderPendings []*types.Order
+	db            *BatchDatabase
 	// pair and max volume ...
 	//allowedPairs map[string]*big.Int
 
@@ -418,23 +419,9 @@ func (tomox *TomoX) postEvent(envelope *Envelope, isP2P bool) error {
 		return err
 	}
 
-	order := toOrder(payload)
-	if order["type"] == Cancel {
-		err := tomox.CancelOrder(order)
-		if err != nil {
-			log.Error("Can't cancel order", "err", err)
-			return err
-		}
-		log.Info("Cancelled order", "detail", order)
-	} else {
-		log.Info("Save order", "detail", order)
-		trades, orderInBook, err := tomox.ProcessOrder(order)
-		if err != nil {
-			log.Error("Can't process order", "err", err)
-			return err
-		}
-		log.Info("Orderbook result", "Trade", trades, "OrderInBook", orderInBook)
-	}
+	// Save quote order to pendings.
+	tomox.OrderPendings = append(tomox.OrderPendings, payload)
+
 	return nil
 }
 
@@ -450,6 +437,37 @@ func toOrder(payload *types.Order) map[string]string {
 	// if insert id is not used, just for update
 	order["order_id"] = "0"
 	return order
+}
+
+func (tomox *TomoX) ProcessOrdersPendings() error {
+	payloads := tomox.OrderPendings
+	if len(payloads) <= 0 {
+		return nil
+	}
+	log.Error("payloads", "payloads", payloads)
+	for _, payload := range payloads {
+		order := toOrder(payload)
+		if order["type"] == Cancel {
+			err := tomox.CancelOrder(order)
+			if err != nil {
+				log.Error("Can't cancel order", "err", err)
+				return err
+			}
+			log.Info("Cancelled order", "detail", order)
+		} else {
+			log.Info("Save order", "detail", order)
+			trades, orderInBook, err := tomox.ProcessOrder(order)
+			if err != nil {
+				log.Error("Can't process order", "err", err)
+				return err
+			}
+			log.Info("Orderbook result", "Trade", trades, "OrderInBook", orderInBook)
+		}
+	}
+	// Reset order pending after process.
+	tomox.OrderPendings = nil
+
+	return nil
 }
 
 // checkOverflow checks if message queue overflow occurs and reports it if necessary.

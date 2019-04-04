@@ -33,8 +33,8 @@ type OrderBookItem struct {
 // OrderBook : list of orders
 type OrderBook struct {
 	db   *BatchDatabase // this is for orderBook
-	Bids *OrderTree     `json:"bids"`
-	Asks *OrderTree     `json:"asks"`
+	Bids *OrderTree `json:"bids"`
+	Asks *OrderTree `json:"asks"`
 	Item *OrderBookItem
 
 	Key  []byte

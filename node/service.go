@@ -24,7 +24,6 @@ import (
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/rpc"
-	"github.com/ethereum/go-ethereum/log"
 )
 
 // ServiceContext is a collection of service independent options inherited from
@@ -60,7 +59,6 @@ func (ctx *ServiceContext) ResolvePath(path string) string {
 
 // Service retrieves a currently running service registered of a specific type.
 func (ctx *ServiceContext) Service(service interface{}) error {
-	log.Error("ctx.services", "ctx.services", ctx.services)
 	element := reflect.ValueOf(service).Elem()
 	if running, ok := ctx.services[element.Type()]; ok {
 		element.Set(reflect.ValueOf(running))
