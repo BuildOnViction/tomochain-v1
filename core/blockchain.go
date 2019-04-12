@@ -507,7 +507,7 @@ func (bc *BlockChain) insert(block *types.Block) {
 	bc.currentBlock.Store(block)
 
 	// save cache BlockSigners
-	if bc.chainConfig.Posv != nil {
+	if bc.chainConfig.Posv != nil && !bc.chainConfig.IsTIPSigning(block.Number()) {
 		engine := bc.Engine().(*posv.Posv)
 		engine.CacheData(block.Header(), block.Transactions(), bc.GetReceiptsByHash(block.Hash()))
 	}
@@ -1019,6 +1019,11 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 	if status == CanonStatTy {
 		bc.insert(block)
 	}
+	// save cache BlockSigners
+	if bc.chainConfig.Posv != nil && bc.chainConfig.IsTIPSigning(block.Number()) {
+		engine := bc.Engine().(*posv.Posv)
+		engine.CacheSigner(block.Header().Hash(), block.Transactions())
+	}
 	bc.futureBlocks.Remove(block.Hash())
 	return status, nil
 }
@@ -1072,7 +1077,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 
 	for i, block := range chain {
 		headers[i] = block.Header()
-		seals[i] = true
+		seals[i] = false
 		bc.downloadingBlock.Add(block.Hash(), true)
 	}
 	abort, results := bc.engine.VerifyHeaders(bc, headers, seals)

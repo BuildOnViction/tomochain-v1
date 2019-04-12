@@ -18,6 +18,7 @@ package miner
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"math/big"
 	"os"
@@ -329,7 +330,7 @@ func (self *worker) wait() {
 				continue
 			}
 			block := result.Block
-			if self.config.Posv != nil && block.NumberU64() >= self.config.Posv.Epoch {
+			if self.config.Posv != nil && block.NumberU64() >= self.config.Posv.Epoch && len(block.Validator()) == 0 {
 				self.mux.Post(core.NewMinedBlockEvent{Block: block})
 				continue
 			}
@@ -583,12 +584,15 @@ func (self *worker) commitNewWork() {
 	if self.config.DAOForkSupport && self.config.DAOForkBlock != nil && self.config.DAOForkBlock.Cmp(header.Number) == 0 {
 		misc.ApplyDAOHardFork(work.state)
 	}
+	if common.TIPSigning.Cmp(header.Number) == 0 {
+		work.state.DeleteAddress(common.HexToAddress(common.BlockSigners))
+	}
 	// won't grasp txs at checkpoint
 	var (
-		txs *types.TransactionsByPriceAndNonce
+		txs        *types.TransactionsByPriceAndNonce
 		specialTxs types.Transactions
 	)
-	if self.config.Posv != nil && header.Number.Uint64() % self.config.Posv.Epoch != 0 {
+	if self.config.Posv != nil && header.Number.Uint64()%self.config.Posv.Epoch != 0 {
 		pending, err := self.eth.TxPool().Pending()
 		if err != nil {
 			log.Error("Failed to fetch pending transactions", "err", err)
@@ -597,7 +601,6 @@ func (self *worker) commitNewWork() {
 		txs, specialTxs = types.NewTransactionsByPriceAndNonce(self.current.signer, pending, signers)
 	}
 	work.commitTransactions(self.mux, txs, specialTxs, self.chain, self.coinbase)
-
 
 	// compute uncles for the new block.
 	var (
@@ -671,6 +674,17 @@ func (env *Work) commitTransactions(mux *event.TypeMux, txs *types.TransactionsB
 		if tx.Protected() && !env.config.IsEIP155(env.header.Number) {
 			log.Trace("Ignoring reply protected special transaction", "hash", tx.Hash(), "eip155", env.config.EIP155Block)
 			continue
+		}
+		if tx.To().Hex() == common.BlockSigners {
+			if len(tx.Data()) < 68 {
+				log.Trace("Data special transaction invalid length", "hash", tx.Hash(), "data", len(tx.Data()))
+				continue
+			}
+			blkNumber := binary.BigEndian.Uint64(tx.Data()[8:40])
+			if blkNumber >= env.header.Number.Uint64() || blkNumber <= env.header.Number.Uint64()-env.config.Posv.Epoch*2 {
+				log.Trace("Data special transaction invalid number", "hash", tx.Hash(), "blkNumber", blkNumber, "miner", env.header.Number)
+				continue
+			}
 		}
 		// Start executing the transaction
 		env.state.Prepare(tx.Hash(), common.Hash{}, env.tcount)

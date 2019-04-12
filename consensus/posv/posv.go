@@ -225,12 +225,12 @@ type Posv struct {
 	signFn clique.SignerFn // Signer function to authorize hashes with
 	lock   sync.RWMutex    // Protects the signer fields
 
-	BlockSigners *lru.Cache
-	HookReward func(chain consensus.ChainReader, state *state.StateDB, header *types.Header) (error, map[string]interface{})
-	HookPenalty      func(chain consensus.ChainReader, blockNumberEpoc uint64) ([]common.Address, error)
-	HookValidator    func(header *types.Header, signers []common.Address) ([]byte, error)
-	HookVerifyMNs    func(header *types.Header, signers []common.Address) error
-	HookPrepareBlock func(header *types.Header) error
+	BlockSigners          *lru.Cache
+	HookReward            func(chain consensus.ChainReader, state *state.StateDB, header *types.Header) (error, map[string]interface{})
+	HookPenalty           func(chain consensus.ChainReader, blockNumberEpoc uint64) ([]common.Address, error)
+	HookPenaltyTIPSigning func(chain consensus.ChainReader, header *types.Header, candidate []common.Address) ([]common.Address, error)
+	HookValidator         func(header *types.Header, signers []common.Address) ([]byte, error)
+	HookVerifyMNs         func(header *types.Header, signers []common.Address) error
 }
 
 // New creates a PoSV proof-of-stake-voting consensus engine with the initial
@@ -308,6 +308,9 @@ func (c *Posv) verifyHeaderWithCache(chain consensus.ChainReader, header *types.
 // looking those up from the database. This is useful for concurrently verifying
 // a batch of new headers.
 func (c *Posv) verifyHeader(chain consensus.ChainReader, header *types.Header, parents []*types.Header, fullVerify bool) error {
+	if common.IsTestnet {
+		fullVerify = false
+	}
 	if header.Number == nil {
 		return errUnknownBlock
 	}
@@ -395,9 +398,15 @@ func (c *Posv) verifyCascadingFields(chain consensus.ChainReader, header *types.
 	}
 	// If the block is a checkpoint block, verify the signer list
 	if number%c.config.Epoch == 0 {
+		signers := snap.GetSigners()
 		penPenalties := []common.Address{}
-		if c.HookPenalty != nil {
-			penPenalties, err = c.HookPenalty(chain, number)
+		if c.HookPenalty != nil || c.HookPenaltyTIPSigning != nil {
+			var err error = nil
+			if chain.Config().IsTIPSigning(header.Number) {
+				penPenalties, err = c.HookPenaltyTIPSigning(chain, header, signers)
+			} else {
+				penPenalties, err = c.HookPenalty(chain, number)
+			}
 			if err != nil {
 				return err
 			}
@@ -409,7 +418,6 @@ func (c *Posv) verifyCascadingFields(chain consensus.ChainReader, header *types.
 				return errInvalidCheckpointPenalties
 			}
 		}
-		signers := snap.GetSigners()
 		signers = common.RemoveItemFromArray(signers, penPenalties)
 		for i := 1; i <= common.LimitPenaltyEpoch; i++ {
 			if number > uint64(i)*c.config.Epoch {
@@ -484,10 +492,16 @@ func whoIsCreator(snap *Snapshot, header *types.Header) (common.Address, error) 
 
 func (c *Posv) YourTurn(chain consensus.ChainReader, parent *types.Header, signer common.Address) (int, int, int, bool, error) {
 	masternodes := c.GetMasternodes(chain, parent)
+
 	if common.IsTestnet {
-		// Only three mns for tomo testnet.
-		masternodes = masternodes[:3]
+		// Only three mns hard code for tomo testnet.
+		masternodes = []common.Address{
+			common.HexToAddress("0xfFC679Dcdf444D2eEb0491A998E7902B411CcF20"),
+			common.HexToAddress("0xd76fd76F7101811726DCE9E43C2617706a4c45c8"),
+			common.HexToAddress("0x8A97753311aeAFACfd76a68Cf2e2a9808d3e65E8"),
+		}
 	}
+
 	snap, err := c.GetSnapshot(chain, parent)
 	if err != nil {
 		log.Warn("Failed when trying to commit new work", "err", err)
@@ -725,7 +739,7 @@ func (c *Posv) GetValidator(creator common.Address, chain consensus.ChainReader,
 			return common.Address{}, fmt.Errorf("couldn't find checkpoint header")
 		}
 	}
-	m, err := GetM1M2FromCheckpointHeader(cpHeader)
+	m, err := GetM1M2FromCheckpointHeader(cpHeader, header, chain.Config())
 	if err != nil {
 		return common.Address{}, err
 	}
@@ -780,8 +794,14 @@ func (c *Posv) Prepare(chain consensus.ChainReader, header *types.Header) error 
 	header.Extra = header.Extra[:extraVanity]
 	masternodes := snap.GetSigners()
 	if number >= c.config.Epoch && number%c.config.Epoch == 0 {
-		if c.HookPenalty != nil {
-			penMasternodes, err := c.HookPenalty(chain, number)
+		if c.HookPenalty != nil || c.HookPenaltyTIPSigning != nil {
+			var penMasternodes []common.Address = nil
+			var err error = nil
+			if chain.Config().IsTIPSigning(header.Number) {
+				penMasternodes, err = c.HookPenaltyTIPSigning(chain, header, masternodes)
+			} else {
+				penMasternodes, err = c.HookPenalty(chain, number)
+			}
 			if err != nil {
 				return err
 			}
@@ -789,7 +809,7 @@ func (c *Posv) Prepare(chain consensus.ChainReader, header *types.Header) error 
 				// penalize bad masternode(s)
 				masternodes = common.RemoveItemFromArray(masternodes, penMasternodes)
 				for _, address := range penMasternodes {
-					log.Debug("Penalty status", "address", address, "block number", number)
+					log.Debug("Penalty status", "address", address, "number", number)
 				}
 				header.Penalties = common.ExtractAddressToBytes(penMasternodes)
 			}
@@ -965,7 +985,13 @@ func (c *Posv) Seal(chain consensus.ChainReader, block *types.Block, stop <-chan
 		return nil, err
 	}
 	copy(header.Extra[len(header.Extra)-extraSeal:], sighash)
-
+	m2, err := c.GetValidator(signer, chain, header)
+	if err != nil {
+		return nil, fmt.Errorf("can't get block validator: %v", err)
+	}
+	if m2 == signer {
+		header.Validator = sighash
+	}
 	return block.WithSeal(header), nil
 }
 
@@ -1032,11 +1058,12 @@ func (c *Posv) GetMasternodesFromCheckpointHeader(preCheckpointHeader *types.Hea
 	for i := 0; i < len(masternodes); i++ {
 		copy(masternodes[i][:], preCheckpointHeader.Extra[extraVanity+i*common.AddressLength:])
 	}
+
 	return masternodes
 }
 
-func (c *Posv) CacheData(header *types.Header, txs []*types.Transaction, receipts []*types.Receipt) error {
-	var signTxs []*types.Transaction
+func (c *Posv) CacheData(header *types.Header, txs []*types.Transaction, receipts []*types.Receipt) []*types.Transaction {
+	signTxs := []*types.Transaction{}
 	for _, tx := range txs {
 		if tx.IsSigningTransaction() {
 			var b uint
@@ -1062,7 +1089,19 @@ func (c *Posv) CacheData(header *types.Header, txs []*types.Transaction, receipt
 	log.Debug("Save tx signers to cache", "hash", header.Hash().String(), "number", header.Number, "len(txs)", len(signTxs))
 	c.BlockSigners.Add(header.Hash(), signTxs)
 
-	return nil
+	return signTxs
+}
+
+func (c *Posv) CacheSigner(hash common.Hash, txs []*types.Transaction) []*types.Transaction {
+	signTxs := []*types.Transaction{}
+	for _, tx := range txs {
+		if tx.IsSigningTransaction() {
+			signTxs = append(signTxs, tx)
+		}
+	}
+	log.Debug("Save tx signers to cache", "hash", hash.String(), "len(txs)", len(signTxs))
+	c.BlockSigners.Add(hash, signTxs)
+	return signTxs
 }
 
 func (c *Posv) GetDb() ethdb.Database {
@@ -1094,24 +1133,39 @@ func GetMasternodesFromCheckpointHeader(checkpointHeader *types.Header) []common
 }
 
 // Get m2 list from checkpoint block.
-func GetM1M2FromCheckpointHeader(checkpointHeader *types.Header) (map[common.Address]common.Address, error) {
+func GetM1M2FromCheckpointHeader(checkpointHeader *types.Header, currentHeader *types.Header, config *params.ChainConfig) (map[common.Address]common.Address, error) {
 	if checkpointHeader.Number.Uint64()%common.EpocBlockRandomize != 0 {
 		return nil, errors.New("This block is not checkpoint block epoc.")
 	}
-	m1m2 := map[common.Address]common.Address{}
 	// Get signers from this block.
 	masternodes := GetMasternodesFromCheckpointHeader(checkpointHeader)
 	validators := ExtractValidatorsFromBytes(checkpointHeader.Validators)
-
-	if len(validators) < len(masternodes) {
-		return nil, errors.New("len(m2) is less than len(m1)")
-	}
-	if len(masternodes) > 0 {
-		for i, m1 := range masternodes {
-			m1m2[m1] = masternodes[validators[i]%int64(len(masternodes))]
-		}
+	m1m2, _, err := getM1M2(masternodes, validators, currentHeader, config)
+	if err != nil {
+		return map[common.Address]common.Address{}, err
 	}
 	return m1m2, nil
+}
+
+func getM1M2(masternodes []common.Address, validators []int64, currentHeader *types.Header, config *params.ChainConfig) (map[common.Address]common.Address, uint64, error) {
+	m1m2 := map[common.Address]common.Address{}
+	maxMNs := len(masternodes)
+	moveM2 := uint64(0)
+	if len(validators) < maxMNs {
+		return nil, moveM2, errors.New("len(m2) is less than len(m1)")
+	}
+	if maxMNs > 0 {
+		isForked := config.IsTIPRandomize(currentHeader.Number)
+		if isForked {
+			moveM2 = ((currentHeader.Number.Uint64() % config.Posv.Epoch) / uint64(maxMNs)) % uint64(maxMNs)
+		}
+		for i, m1 := range masternodes {
+			m2Index := uint64(validators[i] % int64(maxMNs))
+			m2Index = (m2Index + moveM2) % uint64(maxMNs)
+			m1m2[m1] = masternodes[m2Index]
+		}
+	}
+	return m1m2, moveM2, nil
 }
 
 // Extract validators from byte array.

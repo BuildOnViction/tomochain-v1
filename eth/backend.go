@@ -20,6 +20,10 @@ package eth
 import (
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/eth/filters"
+	"github.com/ethereum/go-ethereum/rlp"
 	"math/big"
 	"runtime"
 	"sync"
@@ -29,19 +33,16 @@ import (
 	"bytes"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/consensus/posv"
 	"github.com/ethereum/go-ethereum/contracts"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/bloombits"
-	"github.com/ethereum/go-ethereum/core/state"
 	//"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/eth/downloader"
-	"github.com/ethereum/go-ethereum/eth/filters"
 	"github.com/ethereum/go-ethereum/eth/gasprice"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
@@ -51,7 +52,6 @@ import (
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/ethereum/go-ethereum/tomox"
 )
@@ -215,12 +215,13 @@ func New(ctx *node.ServiceContext, config *Config, tomoXServ *tomox.TomoX) (*Eth
 	if eth.chainConfig.Posv != nil {
 		c := eth.engine.(*posv.Posv)
 		signHook := func(block *types.Block) error {
-			ok, err := eth.ValidateMasternode()
+			eb, err := eth.Etherbase()
 			if err != nil {
-				return fmt.Errorf("Can't verify masternode permission: %v", err)
+				log.Error("Cannot get etherbase for append m2 header", "err", err)
+				return fmt.Errorf("etherbase missing: %v", err)
 			}
+			ok := eth.txPool.IsSigner != nil && eth.txPool.IsSigner(eb)
 			if !ok {
-				// silently return as this node doesn't have masternode permission to sign block
 				return nil
 			}
 			if block.NumberU64()%common.MergeSignRange == 0 || !eth.chainConfig.IsTIP2019(block.Number()) {
@@ -246,9 +247,17 @@ func New(ctx *node.ServiceContext, config *Config, tomoXServ *tomox.TomoX) (*Eth
 				return block, false, fmt.Errorf("can't get block validator: %v", err)
 			}
 			if m2 == eb {
-				wallet, _ := eth.accountManager.Find(accounts.Account{Address: eb})
+				wallet, err := eth.accountManager.Find(accounts.Account{Address: eb})
+				if err != nil {
+					log.Error("Can't find coinbase account wallet", "err", err)
+					return block, false, err
+				}
 				header := block.Header()
-				sighash, _ := wallet.SignHash(accounts.Account{Address: eb}, posv.SigHash(header).Bytes())
+				sighash, err := wallet.SignHash(accounts.Account{Address: eb}, posv.SigHash(header).Bytes())
+				if err != nil || sighash == nil {
+					log.Error("Can't get signature hash of m2", "sighash", sighash, "err", err)
+					return block, false, err
+				}
 				header.Validator = sighash
 				return types.NewBlockWithHeader(header).WithBody(block.Transactions(), block.Uncles()), true, nil
 			}
@@ -312,6 +321,115 @@ func New(ctx *node.ServiceContext, config *Config, tomoXServ *tomox.TomoX) (*Eth
 				}
 				log.Debug("Time Calculated HookPenalty ", "block", blockNumberEpoc, "time", common.PrettyDuration(time.Since(start)))
 				return penSigners, nil
+			}
+			return []common.Address{}, nil
+		}
+
+		// Hook scans for bad masternodes and decide to penalty them
+		c.HookPenaltyTIPSigning = func(chain consensus.ChainReader, header *types.Header, candidates []common.Address) ([]common.Address, error) {
+			prevEpoc := header.Number.Uint64() - chain.Config().Posv.Epoch
+			combackEpoch := uint64(0)
+			comebackLength := (common.LimitPenaltyEpoch + 1) * chain.Config().Posv.Epoch
+			if header.Number.Uint64() > comebackLength {
+				combackEpoch = header.Number.Uint64() - comebackLength
+			}
+			if prevEpoc >= 0 {
+				start := time.Now()
+
+				listBlockHash := make([]common.Hash, chain.Config().Posv.Epoch)
+
+				// get list block hash & stats total created block
+				statMiners := make(map[common.Address]int)
+				listBlockHash[0] = header.ParentHash
+				parentnumber := header.Number.Uint64() - 1
+				parentHash := header.ParentHash
+				for i := uint64(1); i < chain.Config().Posv.Epoch; i++ {
+					parentHeader := chain.GetHeader(parentHash, parentnumber)
+					miner, _ := c.RecoverSigner(parentHeader)
+					value, exist := statMiners[miner]
+					if exist {
+						value = value + 1
+					} else {
+						value = 1
+					}
+					statMiners[miner] = value
+					parentHash = parentHeader.ParentHash
+					parentnumber--
+					listBlockHash[i] = parentHash
+				}
+
+				// add list not miner to penalties
+				prevHeader := chain.GetHeaderByNumber(prevEpoc)
+				preMasternodes := c.GetMasternodes(chain, prevHeader)
+				penalties := []common.Address{}
+				for miner, total := range statMiners {
+					if total < common.MinimunMinerBlockPerEpoch {
+						log.Debug("Find a node not enough requirement create block", "addr", miner.Hex(), "total", total)
+						penalties = append(penalties, miner)
+					}
+				}
+				for _, addr := range preMasternodes {
+					if _, exist := statMiners[addr]; !exist {
+						log.Debug("Find a node don't create block", "addr", addr.Hex())
+						penalties = append(penalties, addr)
+					}
+				}
+
+				// get list check penalties signing block & list master nodes wil comeback
+				penComebacks := []common.Address{}
+				if combackEpoch > 0 {
+					combackHeader := chain.GetHeaderByNumber(combackEpoch)
+					penalties := common.ExtractAddressFromBytes(combackHeader.Penalties)
+					for _, penaltie := range penalties {
+						for _, addr := range candidates {
+							if penaltie == addr {
+								penComebacks = append(penComebacks, penaltie)
+							}
+						}
+					}
+				}
+
+				// Loop for each block to check missing sign. with comeback nodes
+				mapBlockHash := map[common.Hash]bool{}
+				for i := common.RangeReturnSigner - 1; i >= 0; i-- {
+					if len(penComebacks) > 0 {
+						blockNumber := header.Number.Uint64() - uint64(i) - 1
+						bhash := listBlockHash[i]
+						if blockNumber%common.MergeSignRange == 0 {
+							mapBlockHash[bhash] = true
+						}
+						signData, ok := c.BlockSigners.Get(bhash)
+						if !ok {
+							block := chain.GetBlock(bhash, blockNumber)
+							txs := block.Transactions()
+							signData = c.CacheSigner(bhash, txs)
+						}
+						txs := signData.([]*types.Transaction)
+						// Check signer signed?
+						for _, tx := range txs {
+							blkHash := common.BytesToHash(tx.Data()[len(tx.Data())-32:])
+							from := *tx.From()
+							if mapBlockHash[blkHash] {
+								for j, addr := range penComebacks {
+									if from == addr {
+										// Remove it from dupSigners.
+										penComebacks = append(penComebacks[:j], penComebacks[j+1:]...)
+										break
+									}
+								}
+							}
+						}
+					} else {
+						break
+					}
+				}
+
+				log.Debug("Time Calculated HookPenaltyTIPSigning ", "block", header.Number, "hash", header.Hash().Hex(), "pen comeback nodes", len(penComebacks), "not enough miner", len(penalties), "time", common.PrettyDuration(time.Since(start)))
+				penalties = append(penalties, penComebacks...)
+				if chain.Config().IsTIPRandomize(header.Number) {
+					return penalties, nil
+				}
+				return penComebacks, nil
 			}
 			return []common.Address{}, nil
 		}
@@ -395,7 +513,7 @@ func New(ctx *node.ServiceContext, config *Config, tomoXServ *tomox.TomoX) (*Eth
 			return nil
 		}
 
-		eth.txPool.IsMasterNode = func(address common.Address) bool {
+		eth.txPool.IsSigner = func(address common.Address) bool {
 			currentHeader := eth.blockchain.CurrentHeader()
 			header := currentHeader
 			// Sometimes, the latest block hasn't been inserted to chain yet
@@ -596,6 +714,28 @@ func (s *Ethereum) ValidateMasternode() (bool, error) {
 	return true, nil
 }
 
+// ValidateMasternodeTestNet checks if node's address is in set of masternodes in Testnet
+func (s *Ethereum) ValidateMasternodeTestnet() (bool, error) {
+	eb, err := s.Etherbase()
+	if err != nil {
+		return false, err
+	}
+	if s.chainConfig.Posv == nil {
+		return false, fmt.Errorf("Only verify masternode permission in PoSV protocol")
+	}
+	masternodes := []common.Address{
+		common.HexToAddress("0xfFC679Dcdf444D2eEb0491A998E7902B411CcF20"),
+		common.HexToAddress("0xd76fd76F7101811726DCE9E43C2617706a4c45c8"),
+		common.HexToAddress("0x8A97753311aeAFACfd76a68Cf2e2a9808d3e65E8"),
+	}
+	for _, m := range masternodes {
+		if m == eb {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (s *Ethereum) StartStaking(local bool) error {
 	eb, err := s.Etherbase()
 	if err != nil {
@@ -621,7 +761,9 @@ func (s *Ethereum) StartStaking(local bool) error {
 	return nil
 }
 
-func (s *Ethereum) StopStaking()        { s.miner.Stop() }
+func (s *Ethereum) StopStaking() {
+	s.miner.Stop()
+}
 func (s *Ethereum) IsStaking() bool     { return s.miner.Mining() }
 func (s *Ethereum) Miner() *miner.Miner { return s.miner }
 
@@ -735,4 +877,8 @@ func rewardInflation(chainReward *big.Int, number uint64, blockPerYear uint64) *
 	}
 
 	return chainReward
+}
+
+func (s *Ethereum) GetPeer() int {
+	return len(s.protocolManager.peers.peers)
 }

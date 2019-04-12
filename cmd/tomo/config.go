@@ -236,7 +236,6 @@ func makeFullNode(ctx *cli.Context) (*node.Node, tomoConfig) {
 		utils.RegisterTomoXService(stack, &cfg.TomoX)
 	}
 
-
 	utils.RegisterEthService(stack, &cfg.Eth)
 
 	if ctx.GlobalBool(utils.DashboardEnabledFlag.Name) {
