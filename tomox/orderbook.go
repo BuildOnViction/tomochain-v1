@@ -214,13 +214,14 @@ func (orderBook *OrderBook) processLimitOrder(quote map[string]string, verbose b
 	zero := Zero()
 
 	if side == Bid {
-		minPrice := orderBook.Asks.MinPrice()
-		for quantityToTrade.Cmp(zero) > 0 && orderBook.Asks.NotEmpty() && price.Cmp(minPrice) >= 0 {
-			bestPriceAsks := orderBook.Asks.MinPriceList()
-			quantityToTrade, newTrades = orderBook.processOrderList(Ask, bestPriceAsks, quantityToTrade, quote, verbose)
-			trades = append(trades, newTrades...)
-			minPrice = orderBook.Asks.MinPrice()
-		}
+		// Skip process order list.
+		//minPrice := orderBook.Asks.MinPrice()
+		//for quantityToTrade.Cmp(zero) > 0 && orderBook.Asks.NotEmpty() && price.Cmp(minPrice) >= 0 {
+		//	bestPriceAsks := orderBook.Asks.MinPriceList()
+		//	quantityToTrade, newTrades = orderBook.processOrderList(Ask, bestPriceAsks, quantityToTrade, quote, verbose)
+		//	trades = append(trades, newTrades...)
+		//	minPrice = orderBook.Asks.MinPrice()
+		//}
 
 		if quantityToTrade.Cmp(zero) > 0 {
 			quote["order_id"] = strconv.FormatUint(orderBook.Item.NextOrderID, 10)
@@ -230,13 +231,14 @@ func (orderBook *OrderBook) processLimitOrder(quote map[string]string, verbose b
 		}
 
 	} else {
-		maxPrice := orderBook.Bids.MaxPrice()
-		for quantityToTrade.Cmp(zero) > 0 && orderBook.Bids.NotEmpty() && price.Cmp(maxPrice) <= 0 {
-			bestPriceBids := orderBook.Bids.MaxPriceList()
-			quantityToTrade, newTrades = orderBook.processOrderList(Bid, bestPriceBids, quantityToTrade, quote, verbose)
-			trades = append(trades, newTrades...)
-			maxPrice = orderBook.Bids.MaxPrice()
-		}
+		// Skip process order list.
+		//maxPrice := orderBook.Bids.MaxPrice()
+		//for quantityToTrade.Cmp(zero) > 0 && orderBook.Bids.NotEmpty() && price.Cmp(maxPrice) <= 0 {
+		//	bestPriceBids := orderBook.Bids.MaxPriceList()
+		//	quantityToTrade, newTrades = orderBook.processOrderList(Bid, bestPriceBids, quantityToTrade, quote, verbose)
+		//	trades = append(trades, newTrades...)
+		//	maxPrice = orderBook.Bids.MaxPrice()
+		//}
 
 		if quantityToTrade.Cmp(zero) > 0 {
 			quote["order_id"] = strconv.FormatUint(orderBook.Item.NextOrderID, 10)
