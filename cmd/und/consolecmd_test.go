@@ -40,7 +40,7 @@ const (
 func TestConsoleWelcome(t *testing.T) {
 	coinbase := "0x8605cdbbdb6d264aa742e77020dcbc58fcdce182"
 
-	// Start a tomo console, make sure it's cleaned up and terminate the console
+	// Start a und console, make sure it's cleaned up and terminate the console
 	tomo := runTomo(t,
 		"--port", "0", "--maxpeers", "0", "--nodiscover", "--nat", "none",
 		"--etherbase", coinbase,
@@ -58,7 +58,7 @@ func TestConsoleWelcome(t *testing.T) {
 	tomo.Expect(`
 Welcome to the Tomo JavaScript console!
 
-instance: tomo/v{{tomover}}/{{goos}}-{{goarch}}/{{gover}}
+instance: und/v{{tomover}}/{{goos}}-{{goarch}}/{{gover}}
 coinbase: {{.Etherbase}}
 at block: 0 ({{niltime}})
  datadir: {{.Datadir}}
@@ -79,7 +79,7 @@ func TestIPCAttachWelcome(t *testing.T) {
 	} else {
 		ws := tmpdir(t)
 		defer os.RemoveAll(ws)
-		ipc = filepath.Join(ws, "tomo.ipc")
+		ipc = filepath.Join(ws, "und.ipc")
 	}
 	tomo := runTomo(t,
 		"--port", "0", "--maxpeers", "0", "--nodiscover", "--nat", "none",
@@ -122,7 +122,7 @@ func TestWSAttachWelcome(t *testing.T) {
 }
 
 func testAttachWelcome(t *testing.T, tomo *testtomo, endpoint, apis string) {
-	// Attach to a running tomo note and terminate immediately
+	// Attach to a running und note and terminate immediately
 	attach := runTomo(t, "attach", endpoint)
 	defer attach.ExpectExit()
 	attach.CloseStdin()
@@ -142,7 +142,7 @@ func testAttachWelcome(t *testing.T, tomo *testtomo, endpoint, apis string) {
 	attach.Expect(`
 Welcome to the Tomo JavaScript console!
 
-instance: tomo/v{{tomover}}/{{goos}}-{{goarch}}/{{gover}}
+instance: und/v{{tomover}}/{{goos}}-{{goarch}}/{{gover}}
 coinbase: {{etherbase}}
 at block: 0 ({{niltime}}){{if ipc}}
  datadir: {{datadir}}{{end}}

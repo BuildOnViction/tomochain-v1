@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with go-ethereum. If not, see <http://www.gnu.org/licenses/>.
 
-// Contains the tomo command usage template and generator.
+// Contains the und command usage template and generator.
 
 package main
 

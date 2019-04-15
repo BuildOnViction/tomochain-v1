@@ -36,7 +36,7 @@ import (
 var bugCommand = cli.Command{
 	Action:    utils.MigrateFlags(reportBug),
 	Name:      "bug",
-	Usage:     "opens a window to report a bug on the tomo repo",
+	Usage:     "opens a window to report a bug on the und repo",
 	ArgsUsage: " ",
 	Category:  "MISCELLANEOUS COMMANDS",
 }

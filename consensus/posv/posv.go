@@ -494,7 +494,7 @@ func (c *Posv) YourTurn(chain consensus.ChainReader, parent *types.Header, signe
 	masternodes := c.GetMasternodes(chain, parent)
 
 	if common.IsTestnet {
-		// Only three mns hard code for tomo testnet.
+		// Only three mns hard code for und testnet.
 		masternodes = []common.Address{
 			common.HexToAddress("0xfFC679Dcdf444D2eEb0491A998E7902B411CcF20"),
 			common.HexToAddress("0xd76fd76F7101811726DCE9E43C2617706a4c45c8"),

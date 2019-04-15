@@ -41,7 +41,7 @@ import (
 )
 
 const (
-	clientIdentifier = "tomo" // Client identifier to advertise over the network
+	clientIdentifier = "und" // Client identifier to advertise over the network
 )
 
 var (
@@ -149,7 +149,7 @@ var (
 )
 
 func init() {
-	// Initialize the CLI app and start tomo
+	// Initialize the CLI app and start und
 	app.Action = tomo
 	app.HideVersion = true // we have a command to print the version
 	app.Copyright = "Copyright (c) 2018 Tomochain"
@@ -206,7 +206,7 @@ func main() {
 	}
 }
 
-// tomo is the main entry point into the system if no special subcommand is ran.
+// und is the main entry point into the system if no special subcommand is ran.
 // It creates a default node based on the command line arguments and runs it in
 // blocking mode, waiting for it to be shut down.
 func tomo(ctx *cli.Context) error {

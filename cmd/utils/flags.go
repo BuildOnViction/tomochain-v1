@@ -150,7 +150,7 @@ var (
 		Usage: "Ropsten network: pre-configured proof-of-work test network",
 	}
 	TomoTestnetFlag = cli.BoolFlag{
-		Name:  "tomo-testnet",
+		Name:  "und-testnet",
 		Usage: "Tomo test network",
 	}
 	RinkebyFlag = cli.BoolFlag{
@@ -748,7 +748,7 @@ func setIPC(ctx *cli.Context, cfg *node.Config) {
 }
 
 // MakeDatabaseHandles raises out the number of allowed file handles per process
-// for tomo and returns half of the allowance to assign to the database.
+// for und and returns half of the allowance to assign to the database.
 func MakeDatabaseHandles() int {
 	limit, err := fdlimit.Current()
 	if err != nil {
@@ -780,7 +780,7 @@ func MakeAddress(ks *keystore.KeyStore, account string) (accounts.Account, error
 	log.Warn("-------------------------------------------------------------------")
 	log.Warn("Referring to accounts by order in the keystore folder is dangerous!")
 	log.Warn("This functionality is deprecated and will be removed in the future!")
-	log.Warn("Please use explicit addresses! (can search via `tomo account list`)")
+	log.Warn("Please use explicit addresses! (can search via `und account list`)")
 	log.Warn("-------------------------------------------------------------------")
 
 	accs := ks.Accounts()
@@ -1093,7 +1093,7 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 		cfg.EnablePreimageRecording = ctx.GlobalBool(VMEnableDebugFlag.Name)
 	}
 	if ctx.GlobalIsSet(StoreRewardFlag.Name) {
-		common.StoreRewardFolder = filepath.Join(stack.DataDir(), "tomo", "rewards")
+		common.StoreRewardFolder = filepath.Join(stack.DataDir(), "und", "rewards")
 		if _, err := os.Stat(common.StoreRewardFolder); os.IsNotExist(err) {
 			os.Mkdir(common.StoreRewardFolder, os.ModePerm)
 		}
@@ -1304,11 +1304,11 @@ func MakeConsolePreloads(ctx *cli.Context) []string {
 // This is a temporary function used for migrating old command/flags to the
 // new format.
 //
-// e.g. tomo account new --keystore /tmp/mykeystore --lightkdf
+// e.g. und account new --keystore /tmp/mykeystore --lightkdf
 //
 // is equivalent after calling this method with:
 //
-// tomo --keystore /tmp/mykeystore --lightkdf account new
+// und --keystore /tmp/mykeystore --lightkdf account new
 //
 // This allows the use of the existing configuration functionality.
 // When all flags are migrated this function can be removed and the existing
