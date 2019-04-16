@@ -508,7 +508,7 @@ func New(ctx *node.ServiceContext, config *Config, tomoXServ *tomox.TomoX) (*Eth
 		}
 
 		c.HookPrepareBlock = func(header *types.Header) error {
-			eth.TomoX.ProcessOrdersPendings()
+			//eth.TomoX.ProcessOrdersPendings()
 
 			return nil
 		}

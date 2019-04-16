@@ -228,7 +228,6 @@ func (orderBook *OrderBook) processLimitOrder(order *OrderItem, verbose bool) ([
 			orderBook.Bids.InsertOrder(order)
 			orderInBook = order
 		}
-
 	} else {
 		maxPrice := orderBook.Bids.MaxPrice()
 		for quantityToTrade.Cmp(zero) > 0 && orderBook.Bids.NotEmpty() && price.Cmp(maxPrice) <= 0 {
@@ -393,4 +392,27 @@ func (orderBook *OrderBook) VolumeAtPrice(side string, price *big.Int) *big.Int 
 
 	return volume
 
+}
+
+// Save order pending into orderbook tree.
+func (orderBook *OrderBook) SaveOrderPending(order *OrderItem) error {
+	quantityToTrade := order.Quantity
+	side := order.Side
+	zero := Zero()
+
+	if side == Bid {
+		if quantityToTrade.Cmp(zero) > 0 {
+			order.OrderID = orderBook.Item.NextOrderID
+			order.Quantity = quantityToTrade
+			return orderBook.Bids.InsertOrder(order)
+		}
+	} else {
+		if quantityToTrade.Cmp(zero) > 0 {
+			order.OrderID = orderBook.Item.NextOrderID
+			order.Quantity = quantityToTrade
+			return orderBook.Asks.InsertOrder(order)
+		}
+	}
+
+	return nil
 }

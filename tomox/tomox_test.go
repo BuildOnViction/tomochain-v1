@@ -1,14 +1,14 @@
 package tomox
 
 import (
-	"math/big"
-	"testing"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/rpc"
-	"time"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"encoding/hex"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/rpc"
+	"math/big"
+	"testing"
+	"time"
 )
 
 func buildOrder() *OrderItem {

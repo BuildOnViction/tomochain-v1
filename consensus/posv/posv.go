@@ -231,6 +231,7 @@ type Posv struct {
 	HookPenaltyTIPSigning func(chain consensus.ChainReader, header *types.Header, candidate []common.Address) ([]common.Address, error)
 	HookValidator         func(header *types.Header, signers []common.Address) ([]byte, error)
 	HookVerifyMNs         func(header *types.Header, signers []common.Address) error
+	HookPrepareBlock      func(header *types.Header) error
 }
 
 // New creates a PoSV proof-of-stake-voting consensus engine with the initial
