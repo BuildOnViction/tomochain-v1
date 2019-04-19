@@ -103,9 +103,12 @@ func NewOrderBook(name string, db OrderDao) *OrderBook {
 
 func (orderBook *OrderBook) Save() error {
 
-	orderBook.Asks.Save()
-	orderBook.Bids.Save()
-
+	if err := orderBook.Asks.Save(); err != nil {
+		return err
+	}
+	if err := orderBook.Bids.Save(); err != nil {
+		return err
+	}
 	return orderBook.db.Put(orderBook.Key, orderBook.Item)
 }
 
@@ -115,8 +118,12 @@ func (orderBook *OrderBook) Commit() error {
 }
 
 func (orderBook *OrderBook) Restore() error {
-	orderBook.Asks.Restore()
-	orderBook.Bids.Restore()
+	if err := orderBook.Asks.Restore(); err != nil {
+		return nil
+	}
+	if err := orderBook.Bids.Restore(); err != nil {
+		return err
+	}
 
 	val, err := orderBook.db.Get(orderBook.Key, orderBook.Item)
 	if err == nil {
@@ -428,12 +435,14 @@ func (orderBook *OrderBook) SaveOrderPending(order *OrderItem) error {
 
 	if side == Bid {
 		if quantityToTrade.Cmp(zero) > 0 {
+			orderBook.Item.NextOrderID++
 			order.OrderID = orderBook.Item.NextOrderID
 			order.Quantity = quantityToTrade
 			return orderBook.Bids.InsertOrder(order)
 		}
 	} else {
 		if quantityToTrade.Cmp(zero) > 0 {
+			orderBook.Item.NextOrderID++
 			order.OrderID = orderBook.Item.NextOrderID
 			order.Quantity = quantityToTrade
 			return orderBook.Asks.InsertOrder(order)

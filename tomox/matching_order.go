@@ -29,6 +29,7 @@ type MatchingOrder struct {
 var (
 	// errors
 	ErrUnsupportedEngine       = errors.New("only POSV supports matching orders")
+	ErrTomoXServiceNotFound    = errors.New("can't attach tomoX service")
 	ErrFutureOrder             = errors.New("matching order: future order")
 	ErrWrongHash               = errors.New("matching order: wrong hash")
 	ErrDuplicatedMatchingOrder = errors.New("matching order: this order has been matched")
@@ -41,6 +42,8 @@ var (
 	ErrInvalidRelayer          = errors.New("matching order: invalid relayer")
 	ErrInvalidOrderType        = errors.New("matching order: unsupported order type: Limit/Market/Cancel")
 	ErrInvalidOrderSide        = errors.New("matching order: invalid order side")
+	ErrEmptyOrderBook          = errors.New("empty orderbook")
+	ErrPairNotFound            = errors.New("pair can't be found in orderbook")
 
 	// supported order types
 	MatchingOrderType = map[string]bool{

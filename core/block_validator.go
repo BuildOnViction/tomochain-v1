@@ -86,14 +86,23 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 		if err := json.Unmarshal(tx.Data(), &order); err != nil {
 			return err
 		}
+
+		// verify data fields
 		if engine, ok := v.engine.(*posv.Posv); ok {
 			if err := engine.ValidateMatchingOrder(&order, currentState); err != nil {
 				return err
 			}
+			// run Matching Engine and compare to result of M1
+			if tomoX := engine.GetTomoXService(); tomoX != nil {
+				// TODO: tomox.RunME()
+				// TODO: verify ME result
+			} else {
+				return tomox.ErrTomoXServiceNotFound
+			}
+
 		} else {
 			return tomox.ErrUnsupportedEngine
 		}
-
 	}
 	return nil
 }
