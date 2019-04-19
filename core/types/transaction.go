@@ -314,7 +314,7 @@ func (tx *Transaction) IsMatchingTransaction() bool {
 		return false
 	}
 
-	if tx.To().String() != common.MatchingOrderSMC {
+	if tx.To().String() != common.StringToAddress(common.MatchingOrderSMC).String() {
 		return false
 	}
 	if len(tx.Data()) == 0 {

@@ -17,9 +17,12 @@
 package core
 
 import (
+	"encoding/json"
 	"fmt"
+	"github.com/ethereum/go-ethereum/tomox"
 	"math/big"
 	"math/rand"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -1319,5 +1322,135 @@ func TestLargeReorgTrieGC(t *testing.T) {
 		if node, _ := chain.stateCache.TrieDB().Node(block.Root()); node != nil {
 			t.Fatalf("competitor %d: competing chain state missing", i)
 		}
+	}
+}
+
+func TestBlockChain_UpdateOrderBook(t *testing.T) {
+	os.Mkdir("test", os.ModePerm)
+	defer os.RemoveAll("test")
+	tomoX := tomox.New(&tomox.Config{DataDir: "test"})
+	order := &tomox.MatchingOrder{
+		Buy: &tomox.OrderItem{
+			Quantity:        big.NewInt(100),
+			FilledAmount:    big.NewInt(100),
+			Price:           big.NewInt(50),
+			ExchangeAddress: common.StringToAddress("exchange"),
+			UserAddress:     common.StringToAddress("userA"),
+			BaseToken:       common.StringToAddress("base"),
+			QuoteToken:      common.StringToAddress("quote"),
+			Side:            tomox.Bid,
+			Type:            tomox.Limit,
+			PairName:        "WETH/TOMO",
+			MakeFee:         big.NewInt(0),
+			TakeFee:         big.NewInt(0),
+			Nonce:           big.NewInt(0),
+			CreatedAt:       uint64(time.Now().Unix()),
+			UpdatedAt:       uint64(time.Now().Unix()),
+			OrderID:         uint64(1),
+			Signature: &tomox.Signature{
+				V: 1,
+				R: common.StringToHash("aaa"),
+				S: common.StringToHash("bbb"),
+			},
+		},
+		Sell: &tomox.OrderItem{
+			Quantity:        big.NewInt(100),
+			FilledAmount:    big.NewInt(100),
+			Price:           big.NewInt(45),
+			ExchangeAddress: common.StringToAddress("exchange"),
+			UserAddress:     common.StringToAddress("userB"),
+			BaseToken:       common.StringToAddress("base"),
+			QuoteToken:      common.StringToAddress("quote"),
+			Side:            tomox.Ask,
+			Type:            tomox.Limit,
+			PairName:        "WETH/TOMO",
+			MakeFee:         big.NewInt(0),
+			TakeFee:         big.NewInt(0),
+			Nonce:           big.NewInt(0),
+			CreatedAt:       uint64(time.Now().Unix()),
+			UpdatedAt:       uint64(time.Now().Unix()),
+			OrderID:         uint64(2),
+			Signature: &tomox.Signature{
+				V: 2,
+				R: common.StringToHash("aaab"),
+				S: common.StringToHash("bbbc"),
+			},
+		},
+	}
+	txData, _ := json.Marshal(order)
+	tx := types.NewTransaction(1, common.StringToAddress(common.MatchingOrderSMC), big.NewInt(0), 1000, big.NewInt(1000), txData)
+
+	// testcase: empty orderbook
+	if err := updateOrderBook(tomoX, tx); err != tomox.ErrEmptyOrderBook {
+		t.Error("err", err)
+	}
+
+	tomoX.Orderbooks = map[string]*tomox.OrderBook{
+		"ABC": new(tomox.OrderBook),
+	}
+	// testcase: pair not found in orderbook
+	if err := updateOrderBook(tomoX, tx); err != tomox.ErrPairNotFound {
+		t.Error("err", err)
+	}
+
+	ob, _ := tomoX.GetOrderBook("weth/tomo")
+	ob.SaveOrderPending(order.Buy)
+	ob.SaveOrderPending(order.Sell)
+
+	if err := updateOrderBook(tomoX, tx); err != nil {
+		t.Error("Fully matching: FAILED", err)
+	} else {
+		t.Log("Fully matching: PASSED")
+	}
+
+	// test partialBuy
+	ob, _ = tomoX.GetOrderBook("wbtc/tomo")
+
+	order.Buy.PairName = "WBTC/TOMO"
+	order.Buy.Quantity = big.NewInt(150)
+	order.Sell.Quantity = big.NewInt(100)
+	order.Sell.PairName = "WBTC/TOMO"
+
+	ob.SaveOrderPending(order.Buy)
+	ob.SaveOrderPending(order.Sell)
+
+	txData, _ = json.Marshal(order)
+	tx = types.NewTransaction(1, common.StringToAddress(common.MatchingOrderSMC), big.NewInt(0), 1000, big.NewInt(1000), txData)
+
+	if err := updateOrderBook(tomoX, tx); err != nil {
+		t.Error("PartialBUY matching: FAILED", err)
+	} else {
+		t.Log("PartialBUY matching: PASSED")
+	}
+
+	// check remainingQuantity
+	remainingBuy := ob.Bids.GetOrder(tomox.GetKeyFromString("1"), order.Buy.Price)
+	if remainingBuy.Item.Quantity.Cmp(big.NewInt(50)) != 0 {
+		t.Error("Wrong remaining quantity")
+	}
+
+	// test partialSell
+	ob, _ = tomoX.GetOrderBook("wltc/tomo")
+	order.Buy.PairName = "WLTC/TOMO"
+	order.Buy.Quantity = big.NewInt(150)
+	order.Sell.Quantity = big.NewInt(300)
+	order.Sell.PairName = "WLTC/TOMO"
+
+	ob.SaveOrderPending(order.Buy)
+	ob.SaveOrderPending(order.Sell)
+
+	txData, _ = json.Marshal(order)
+	tx = types.NewTransaction(1, common.StringToAddress(common.MatchingOrderSMC), big.NewInt(0), 1000, big.NewInt(1000), txData)
+
+	if err := updateOrderBook(tomoX, tx); err != nil {
+		t.Error("PartialSELL matching: FAILED", err)
+	} else {
+		t.Log("PartialSELL matching: PASSED")
+	}
+
+	// check remainingQuantity
+	remainingSell := ob.Asks.GetOrder(tomox.GetKeyFromString("2"), order.Sell.Price)
+	if remainingSell.Item.Quantity.Cmp(big.NewInt(150)) != 0 {
+		t.Error("Wrong remaining quantity")
 	}
 }

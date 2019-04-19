@@ -54,7 +54,6 @@ import (
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
-	"github.com/ethereum/go-ethereum/tomox"
 )
 
 type LesServer interface {
@@ -515,6 +514,10 @@ func New(ctx *node.ServiceContext, config *Config, tomoXServ *tomox.TomoX) (*Eth
 			}
 			c.ValidatedOrders.Add(order.Hash, order)
 			return validateMatchingOrder(order, state)
+		}
+
+		c.GetTomoXService = func() *tomox.TomoX {
+			return eth.TomoX
 		}
 
 		eth.txPool.IsSigner = func(address common.Address) bool {

@@ -103,6 +103,7 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 		} else {
 			return tomox.ErrUnsupportedEngine
 		}
+
 	}
 	return nil
 }

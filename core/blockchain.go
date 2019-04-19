@@ -18,12 +18,16 @@
 package core
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/tomox"
 	"io"
 	"math/big"
 	"os"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -1028,6 +1032,106 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 	return status, nil
 }
 
+func (bc *BlockChain) processMatchedOrders(txs types.Transactions) error {
+	var (
+		tomoX  *tomox.TomoX
+		engine *posv.Posv
+	)
+	for _, tx := range txs {
+		if !tx.IsMatchingTransaction() {
+			continue
+		}
+		if tomoX == nil {
+			if bc.chainConfig.Posv == nil {
+				return tomox.ErrUnsupportedEngine
+			}
+			engine = bc.Engine().(*posv.Posv)
+			if tomoX = engine.GetTomoXService(); tomoX == nil {
+				return tomox.ErrTomoXServiceNotFound
+			}
+		}
+		if err := updateOrderBook(tomoX, tx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func updateOrderBook(tomoX *tomox.TomoX, tx *types.Transaction) error {
+	var (
+		order tomox.MatchingOrder
+		err   error
+	)
+
+	if err = json.Unmarshal(tx.Data(), &order); err != nil {
+		return err
+	}
+	if len(tomoX.Orderbooks) == 0 {
+		return tomox.ErrEmptyOrderBook
+	}
+	name := strings.ToLower(order.Buy.PairName)
+	if orderBook, ok := tomoX.Orderbooks[name]; ok {
+		quantityDiff := new(big.Int)
+		quantityDiff = quantityDiff.Sub(order.Buy.Quantity, order.Sell.Quantity)
+		quantityCheck := quantityDiff.Cmp(big.NewInt(0))
+		remaining := quantityDiff.Abs(quantityDiff)
+
+		var remainingBuy, remainingSell *big.Int
+		switch quantityCheck {
+		case -1:
+			//partialBuy, partialSell = false, true
+			remainingBuy, remainingSell = big.NewInt(0), remaining
+			break
+		case 1:
+			//partialBuy, partialSell = true, false
+			remainingBuy, remainingSell = remaining, big.NewInt(0)
+			break
+		default:
+			//partialBuy, partialSell = false, false
+			remainingBuy, remainingSell = big.NewInt(0), big.NewInt(0)
+		}
+
+		if err = updateOrderQuantity(tomoX, orderBook, order.Buy, remainingBuy); err == nil {
+			err = updateOrderQuantity(tomoX, orderBook, order.Sell, remainingSell)
+		}
+		if err != nil {
+			orderBook.Restore()
+			return err
+		}
+		return orderBook.Save()
+
+	} else {
+		return tomox.ErrPairNotFound
+	}
+}
+
+func updateOrderQuantity(tomoX *tomox.TomoX, ob *tomox.OrderBook, o *tomox.OrderItem, remaining *big.Int) error {
+	var orderTree *tomox.OrderTree
+	if o.Side == tomox.Bid {
+		orderTree = ob.Bids
+	} else {
+		orderTree = ob.Asks
+	}
+	o.Quantity = remaining
+	if remaining.Cmp(big.NewInt(0)) != 0 {
+		// update quantity of order in orderbook
+		o.UpdatedAt = uint64(time.Now().Unix())
+		if err := ob.UpdateOrder(o); err != nil {
+			return err
+		}
+
+	} else {
+		// remove order from orderbook
+		removingOrder := tomoX.GetOrder(strings.ToLower(o.PairName), strconv.FormatUint(o.OrderID, 10))
+		if removingOrder != nil {
+			if _, err := orderTree.RemoveOrder(removingOrder); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // InsertChain attempts to insert the given batch of blocks in to the canonical
 // chain or, otherwise, create a fork. If an error is returned it will return
 // the index number of the failing block as well an error describing what went
@@ -1189,6 +1293,11 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 			bc.reportBlock(block, receipts, err)
 			return i, events, coalescedLogs, err
 		}
+
+		if err := bc.processMatchedOrders(block.Transactions()); err != nil {
+			return i, events, coalescedLogs, err
+		}
+
 		proctime := time.Since(bstart)
 
 		// Write the block to the chain and get the status.
@@ -1392,6 +1501,9 @@ func (bc *BlockChain) insertBlock(block *types.Block) ([]interface{}, []*types.L
 	defer bc.chainmu.Unlock()
 	if bc.HasBlockAndState(block.Hash(), block.NumberU64()) {
 		return events, coalescedLogs, nil
+	}
+	if err := bc.processMatchedOrders(block.Transactions()); err != nil {
+		return events, coalescedLogs, err
 	}
 	status, err := bc.WriteBlockWithState(block, result.receipts, result.state)
 
