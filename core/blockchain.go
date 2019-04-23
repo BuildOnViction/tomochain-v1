@@ -18,12 +18,16 @@
 package core
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math/big"
 	"os"
+	"path/filepath"
 	"sort"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -1879,6 +1883,23 @@ func (bc *BlockChain) UpdateM1() error {
 			return err
 		}
 		log.Info("Masternodes are ready for the next epoch")
+	}
+
+	// if the flag --store-candidates is set, store all candidates and their capacities to files
+	if len(common.StoreCandidateFolder) > 0 {
+		// Notice: this is an additional task, should not return any error here
+		var data []byte
+		// use parentHash for fileName because header.Hash() is changed after that
+		fileName := filepath.Join(common.StoreCandidateFolder, strconv.FormatUint(bc.CurrentHeader().Number.Uint64(), 10)) + "." + bc.CurrentHeader().Hash().Hex()
+		if _, err := os.Stat(fileName); os.IsNotExist(err) {
+			data, err = json.Marshal(ms)
+			if err == nil {
+				err = ioutil.WriteFile(fileName, data, 0644)
+			}
+			if err != nil {
+				log.Error("Error when save candidates info ", "number", bc.CurrentHeader().Number.Uint64(), "hash", bc.CurrentHeader().Hash().Hex(), "err", err, "data", data)
+			}
+		}
 	}
 	return nil
 }

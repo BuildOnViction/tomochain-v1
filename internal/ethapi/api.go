@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"io/ioutil"
 	"math/big"
 	"os"
@@ -39,6 +40,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/consensus/posv"
 	"github.com/ethereum/go-ethereum/contracts"
+	contractValidator "github.com/ethereum/go-ethereum/contracts/validator/contract"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
@@ -757,7 +759,16 @@ func (s *PublicBlockChainAPI) GetCandidateStatus(ctx context.Context, coinbaseAd
 	if epoch == rpc.LatestEpochNumber {
 		candidates, err = s.getCandidatesFromSmartContract()
 	} else {
-		candidates, err = getCandidatesFromFile(header)
+		// we calculates stakers at gap
+		// TODO: remove it when RemoveGap releases https://github.com/tomochain/tomochain/pull/447
+		gapNumber := header.Number.Uint64() - s.b.ChainConfig().Posv.Gap
+		gapHeader, err := s.b.HeaderByNumber(ctx, rpc.BlockNumber(gapNumber))
+		if err != nil {
+			log.Error("Can not get header at gap", "number", gapNumber, "err", err)
+			result[fieldSuccess] = false
+			return result, err
+		}
+		candidates, err = s.getCandidatesFromFile(gapHeader)
 	}
 	if err != nil || len(candidates) == 0 {
 		log.Debug("Candidates list cannot be found", "len(candidates)", len(candidates), "err", err)
@@ -875,7 +886,16 @@ func (s *PublicBlockChainAPI) GetCandidates(ctx context.Context, epoch rpc.Epoch
 	if epoch == rpc.LatestEpochNumber {
 		candidates, err = s.getCandidatesFromSmartContract()
 	} else {
-		candidates, err = getCandidatesFromFile(header)
+		// we calculates stakers at gap
+		// TODO: remove it when RemoveGap releases https://github.com/tomochain/tomochain/pull/447
+		gapNumber := header.Number.Uint64() - s.b.ChainConfig().Posv.Gap
+		gapHeader, err := s.b.HeaderByNumber(ctx, rpc.BlockNumber(gapNumber))
+		if err != nil {
+			log.Error("Can not get header at gap", "number", gapNumber, "err", err)
+			result[fieldSuccess] = false
+			return result, err
+		}
+		candidates, err = s.getCandidatesFromFile(gapHeader)
 	}
 	if err != nil || len(candidates) == 0 {
 		log.Debug("Candidates list cannot be found", "len(candidates)", len(candidates), "err", err)
@@ -964,7 +984,7 @@ func (s *PublicBlockChainAPI) GetPreviousCheckpointFromEpoch(ctx context.Context
 }
 
 // getCandidatesFromFile returns all candidates with their capacities at the previous checkpoint block
-func getCandidatesFromFile(header *types.Header) ([]posv.Masternode, error) {
+func (s *PublicBlockChainAPI) getCandidatesFromFile(header *types.Header) ([]posv.Masternode, error) {
 	var (
 		candidates []posv.Masternode
 		data       []byte
@@ -984,27 +1004,50 @@ func getCandidatesFromFile(header *types.Header) ([]posv.Masternode, error) {
 	} else {
 		log.Debug("Failed to get candidates from file", "filename", fileName)
 	}
+	if err != nil {
+		return []posv.Masternode{}, err
+	}
 	if len(candidates) > 0 {
 		// sort candidates by stake descending
 		sort.Slice(candidates, func(i, j int) bool {
 			return candidates[i].Stake.Cmp(candidates[j].Stake) >= 0
 		})
 	}
-	return candidates, err
+	return candidates, nil
 }
 
 // getCandidatesFromSmartContract returns all candidates with their capacities at the current time
 func (s *PublicBlockChainAPI) getCandidatesFromSmartContract() ([]posv.Masternode, error) {
-	if engine, ok := s.b.GetEngine().(*posv.Posv); ok {
-		_, candidates, err := engine.HookUpdateSigners()
+	client, err := s.b.GetIPCClient()
+	if err != nil {
+		return []posv.Masternode{}, err
+	}
+	addr := common.HexToAddress(common.MasternodeVotingSMC)
+	validator, err := contractValidator.NewTomoValidator(addr, client)
+	if err != nil {
+		return []posv.Masternode{}, err
+	}
+	opts := new(bind.CallOpts)
+	candidates, err := validator.GetCandidates(opts)
+	if err != nil {
+		return []posv.Masternode{}, err
+	}
+	var candidatesWithStakeInfo []posv.Masternode
+	for _, candidate := range candidates {
+		v, err := validator.GetCandidateCap(opts, candidate)
 		if err != nil {
 			return []posv.Masternode{}, err
 		}
-		return candidates, nil
-	} else {
-		log.Error("Unable to load candidates from smart contract, undefined POSV consensus engine")
+		if candidate.String() != "0x0000000000000000000000000000000000000000" {
+			candidatesWithStakeInfo = append(candidatesWithStakeInfo, posv.Masternode{Address: candidate, Stake: v})
+		}
 	}
-	return []posv.Masternode{}, nil
+	if len(candidatesWithStakeInfo) > 0 {
+		sort.Slice(candidatesWithStakeInfo, func(i, j int) bool {
+			return candidatesWithStakeInfo[i].Stake.Cmp(candidatesWithStakeInfo[j].Stake) >= 0
+		})
+	}
+	return candidatesWithStakeInfo, nil
 }
 
 // CallArgs represents the arguments for a call.
