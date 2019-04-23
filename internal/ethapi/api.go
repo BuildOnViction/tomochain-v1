@@ -770,6 +770,7 @@ func (s *PublicBlockChainAPI) GetCandidateStatus(ctx context.Context, coinbaseAd
 		}
 		candidates, err = s.getCandidatesFromFile(gapHeader)
 	}
+
 	if err != nil || len(candidates) == 0 {
 		log.Debug("Candidates list cannot be found", "len(candidates)", len(candidates), "err", err)
 		result[fieldSuccess] = false
@@ -897,6 +898,7 @@ func (s *PublicBlockChainAPI) GetCandidates(ctx context.Context, epoch rpc.Epoch
 		}
 		candidates, err = s.getCandidatesFromFile(gapHeader)
 	}
+
 	if err != nil || len(candidates) == 0 {
 		log.Debug("Candidates list cannot be found", "len(candidates)", len(candidates), "err", err)
 		result[fieldSuccess] = false
