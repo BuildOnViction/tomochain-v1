@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"runtime"
 	"strings"
 	"sync"
@@ -57,6 +58,7 @@ type TomoX struct {
 	// Order related
 	Orderbooks map[string]*OrderBook
 	db         TomoXDao
+	OrderCount map[common.Address] *big.Int
 
 	// P2P messaging related
 	protocol p2p.Protocol
@@ -635,6 +637,9 @@ func (tomox *TomoX) ProcessOrder(order *Order) error {
 	if ob != nil {
 		// insert
 		if order.OrderID == 0 {
+			if err := tomox.verifyOrderNonce(order); err != nil {
+				return err
+			}
 			// Save order into orderbook tree.
 			log.Info("Saving order into pending")
 			err = ob.SaveOrderPending(order)
@@ -656,6 +661,42 @@ func (tomox *TomoX) ProcessOrder(order *Order) error {
 
 	return nil
 }
+
+func (tomox *TomoX) verifyOrderNonce(order *Order) error {
+	var (
+		orderCount *big.Int
+		ok bool
+	)
+	if len(tomox.OrderCount) == 0 {
+		if err := tomox.LoadOrderCount(); err != nil {
+			return err
+		}
+	}
+	if orderCount, ok = tomox.OrderCount[order.UserAddress]; !ok {
+		orderCount = big.NewInt(0)
+	}
+
+	if order.Nonce.Cmp(orderCount) <= 0 {
+		return ErrOrderNonceTooLow
+	}
+	if order.Nonce.Cmp(big.NewInt(LimitThresholdOrderNonceInQueue)) > 0 {
+		return ErrOrderNonceTooHigh
+	}
+	return nil
+}
+
+// load orderCount from persistent storage
+func (tomox *TomoX) LoadOrderCount() error {
+	//TODO: choose leveldb or file
+	return nil
+}
+
+// update orderCount to persistent storage
+func (tomox *TomoX) UpdateOrderCount() {
+	//TODO: choose leveldb or file
+}
+
+
 
 func (tomox *TomoX) CancelOrder(order *Order) error {
 	ob, err := tomox.getAndCreateIfNotExisted(order.PairName)
