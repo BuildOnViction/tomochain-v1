@@ -651,7 +651,7 @@ func (tomox *TomoX) ProcessOrder(order *Order) error {
 			} else {
 				log.Info("Process saved")
 				tomox.OrderCount[order.UserAddress] = order.Nonce
-				go tomox.updateOrderCount()
+				go tomox.UpdateOrderCount()
 			}
 			//log.Info("Process order")
 			//trades, orderInBook = ob.ProcessOrder(order, true)
@@ -674,8 +674,10 @@ func (tomox *TomoX) verifyOrderNonce(order *Order) error {
 		ok         bool
 	)
 	if len(tomox.OrderCount) == 0 {
-		if err := tomox.loadOrderCount(); err != nil {
-			return err
+		if err := tomox.LoadOrderCount(); err != nil {
+			// when a node is started, its database doesn't have orderCount information
+			// Hence, we should not throw error here
+			log.Debug("orderCount is empty in leveldb", "err", err)
 		}
 	}
 	if orderCount, ok = tomox.OrderCount[order.UserAddress]; !ok {
@@ -693,7 +695,7 @@ func (tomox *TomoX) verifyOrderNonce(order *Order) error {
 }
 
 // load orderCount from persistent storage
-func (tomox *TomoX) loadOrderCount() error {
+func (tomox *TomoX) LoadOrderCount() error {
 	var orderCount map[common.Address]*big.Int
 	val, err := tomox.db.Get([]byte(orderCountKey), orderCount)
 	if err != nil {
@@ -704,7 +706,7 @@ func (tomox *TomoX) loadOrderCount() error {
 }
 
 // update orderCount to persistent storage
-func (tomox *TomoX) updateOrderCount() {
+func (tomox *TomoX) UpdateOrderCount() {
 	tomox.db.Put([]byte(orderCountKey), tomox.OrderCount)
 }
 
