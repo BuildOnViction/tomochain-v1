@@ -41,6 +41,7 @@ const (
 	SizeMask             = byte(3) // mask used to extract the size of payload size field from the flags
 	TopicLength          = 86      // in bytes
 	keyIDSize            = 32      // in bytes
+	orderCountKey        = "tomox_ordercount"
 )
 
 type Config struct {
@@ -103,6 +104,7 @@ func NewMongoDBEngine(cfg *Config) *MongoDatabase {
 func New(cfg *Config) *TomoX {
 	tomoX := &TomoX{
 		Orderbooks:    make(map[string]*OrderBook),
+		OrderCount:    make(map[common.Address]*big.Int),
 		peers:         make(map[*Peer]struct{}),
 		quit:          make(chan struct{}),
 		envelopes:     make(map[common.Hash]*Envelope),
@@ -646,6 +648,10 @@ func (tomox *TomoX) ProcessOrder(order *Order) error {
 			if err != nil {
 				log.Error("Error save order pending", "error", err)
 				return err
+			} else {
+				log.Info("Process saved")
+				tomox.OrderCount[order.UserAddress] = order.Nonce
+				go tomox.updateOrderCount()
 			}
 			//log.Info("Process order")
 			//trades, orderInBook = ob.ProcessOrder(order, true)
@@ -665,10 +671,10 @@ func (tomox *TomoX) ProcessOrder(order *Order) error {
 func (tomox *TomoX) verifyOrderNonce(order *Order) error {
 	var (
 		orderCount *big.Int
-		ok bool
+		ok         bool
 	)
 	if len(tomox.OrderCount) == 0 {
-		if err := tomox.LoadOrderCount(); err != nil {
+		if err := tomox.loadOrderCount(); err != nil {
 			return err
 		}
 	}
@@ -679,23 +685,28 @@ func (tomox *TomoX) verifyOrderNonce(order *Order) error {
 	if order.Nonce.Cmp(orderCount) <= 0 {
 		return ErrOrderNonceTooLow
 	}
-	if order.Nonce.Cmp(big.NewInt(LimitThresholdOrderNonceInQueue)) > 0 {
+	distance := Sub(order.Nonce, orderCount)
+	if distance.Cmp(new(big.Int).SetUint64(LimitThresholdOrderNonceInQueue)) > 0 {
 		return ErrOrderNonceTooHigh
 	}
 	return nil
 }
 
 // load orderCount from persistent storage
-func (tomox *TomoX) LoadOrderCount() error {
-	//TODO: choose leveldb or file
+func (tomox *TomoX) loadOrderCount() error {
+	var orderCount map[common.Address]*big.Int
+	val, err := tomox.db.Get([]byte(orderCountKey), orderCount)
+	if err != nil {
+		return err
+	}
+	tomox.OrderCount = val.(map[common.Address]*big.Int)
 	return nil
 }
 
 // update orderCount to persistent storage
-func (tomox *TomoX) UpdateOrderCount() {
-	//TODO: choose leveldb or file
+func (tomox *TomoX) updateOrderCount() {
+	tomox.db.Put([]byte(orderCountKey), tomox.OrderCount)
 }
-
 
 
 func (tomox *TomoX) CancelOrder(order *Order) error {

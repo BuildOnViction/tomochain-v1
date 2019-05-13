@@ -115,3 +115,29 @@ func TestCancelOrder(t *testing.T) {
 		t.Error("rpcClient.Call tomoX_createOrder failed", "err", err)
 	}
 }
+
+func TestTomoX_VerifyOrderNonce(t *testing.T) {
+	tomox := &TomoX{
+		OrderCount: make(map[common.Address]*big.Int),
+	}
+	tomox.OrderCount[common.StringToAddress("0x00011")] = big.NewInt(5)
+
+	order := &OrderItem{
+		Nonce:       big.NewInt(5),
+		UserAddress: common.StringToAddress("0x00011"),
+	}
+	if err := tomox.VerifyOrderNonce(order); err != ErrOrderNonceTooLow {
+		t.Error("Expected error: Nonce to low")
+	}
+
+	// set nonce to high
+	order.Nonce = big.NewInt(16)
+	if err := tomox.VerifyOrderNonce(order); err != ErrOrderNonceTooHigh {
+		t.Error("Expected error: Nonce to high")
+	}
+
+	order.Nonce = big.NewInt(10)
+	if err := tomox.VerifyOrderNonce(order); err != nil {
+		t.Error("Expected: no error")
+	}
+}
