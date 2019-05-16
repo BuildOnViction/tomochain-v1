@@ -673,9 +673,12 @@ func (tomox *TomoX) verifyOrderNonce(order *Order) error {
 		orderCount *big.Int
 		ok         bool
 	)
+
+	// in case of restarting nodes, data in memory has lost
+	// should load from persistent storage
 	if len(tomox.OrderCount) == 0 {
 		if err := tomox.LoadOrderCount(); err != nil {
-			// when a node is started, its database doesn't have orderCount information
+			// if a node has just started, its database doesn't have orderCount information
 			// Hence, we should not throw error here
 			log.Debug("orderCount is empty in leveldb", "err", err)
 		}
@@ -707,7 +710,9 @@ func (tomox *TomoX) LoadOrderCount() error {
 
 // update orderCount to persistent storage
 func (tomox *TomoX) UpdateOrderCount() {
-	tomox.db.Put([]byte(orderCountKey), tomox.OrderCount)
+	if err := tomox.db.Put([]byte(orderCountKey), tomox.OrderCount); err != nil {
+		log.Error("Failed to save orderCount", "err", err)
+	}
 }
 
 
