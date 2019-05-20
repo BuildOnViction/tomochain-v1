@@ -33,7 +33,7 @@ var db, _ = ethdb.NewMemDatabase()
 
 func TestIsValidRelayer(t *testing.T) {
 	order := &tomox.MatchingOrder{
-		Buy: &tomox.OrderItem{
+		Buy: &tomox.Order{
 			ExchangeAddress: common.StringToAddress("relayer1"),
 		},
 	}

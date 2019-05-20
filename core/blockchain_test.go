@@ -23,6 +23,7 @@ import (
 	"math/big"
 	"math/rand"
 	"os"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -1326,11 +1327,15 @@ func TestLargeReorgTrieGC(t *testing.T) {
 }
 
 func TestBlockChain_UpdateOrderBook(t *testing.T) {
-	os.Mkdir("test", os.ModePerm)
-	defer os.RemoveAll("test")
-	tomoX := tomox.New(&tomox.Config{DataDir: "test"})
+	testDir := "TestBlockChain_UpdateOrderBook"
+	tomoX := tomox.New(&tomox.Config{
+		DataDir: testDir,
+		DBEngine: "leveldb",
+	})
+	defer os.RemoveAll(testDir)
+
 	order := &tomox.MatchingOrder{
-		Buy: &tomox.OrderItem{
+		Buy: &tomox.Order{
 			Quantity:        big.NewInt(100),
 			FilledAmount:    big.NewInt(100),
 			Price:           big.NewInt(50),
@@ -1353,7 +1358,7 @@ func TestBlockChain_UpdateOrderBook(t *testing.T) {
 				S: common.StringToHash("bbb"),
 			},
 		},
-		Sell: &tomox.OrderItem{
+		Sell: &tomox.Order{
 			Quantity:        big.NewInt(100),
 			FilledAmount:    big.NewInt(100),
 			Price:           big.NewInt(45),
@@ -1379,7 +1384,6 @@ func TestBlockChain_UpdateOrderBook(t *testing.T) {
 	}
 	txData, _ := json.Marshal(order)
 	tx := types.NewTransaction(1, common.StringToAddress(common.MatchingOrderSMC), big.NewInt(0), 1000, big.NewInt(1000), txData)
-
 	// testcase: empty orderbook
 	if err := updateOrderBook(tomoX, tx); err != tomox.ErrEmptyOrderBook {
 		t.Error("err", err)
@@ -1388,7 +1392,7 @@ func TestBlockChain_UpdateOrderBook(t *testing.T) {
 	tomoX.Orderbooks = map[string]*tomox.OrderBook{
 		"ABC": new(tomox.OrderBook),
 	}
-	// testcase: pair not found in orderbook
+	//// testcase: pair not found in orderbook
 	if err := updateOrderBook(tomoX, tx); err != tomox.ErrPairNotFound {
 		t.Error("err", err)
 	}
@@ -1403,7 +1407,7 @@ func TestBlockChain_UpdateOrderBook(t *testing.T) {
 		t.Log("Fully matching: PASSED")
 	}
 
-	// test partialBuy
+	//test partialBuy
 	ob, _ = tomoX.GetOrderBook("wbtc/tomo")
 
 	order.Buy.PairName = "WBTC/TOMO"
@@ -1424,8 +1428,9 @@ func TestBlockChain_UpdateOrderBook(t *testing.T) {
 	}
 
 	// check remainingQuantity
-	remainingBuy := ob.Bids.GetOrder(tomox.GetKeyFromString("1"), order.Buy.Price)
-	if remainingBuy.Item.Quantity.Cmp(big.NewInt(50)) != 0 {
+	bidsTree, _ := tomoX.GetBidsTree(order.Buy.PairName)
+	remainingBuy := bidsTree.Order(strconv.FormatUint(order.Buy.OrderID, 10))
+	if remainingBuy.Quantity.Cmp(big.NewInt(50)) != 0 {
 		t.Error("Wrong remaining quantity")
 	}
 
@@ -1449,8 +1454,9 @@ func TestBlockChain_UpdateOrderBook(t *testing.T) {
 	}
 
 	// check remainingQuantity
-	remainingSell := ob.Asks.GetOrder(tomox.GetKeyFromString("2"), order.Sell.Price)
-	if remainingSell.Item.Quantity.Cmp(big.NewInt(150)) != 0 {
+	asksTree, _ := tomoX.GetAsksTree(order.Sell.PairName)
+	remainingSell := asksTree.Order(strconv.FormatUint(order.Sell.OrderID, 10))
+	if remainingSell.Quantity.Cmp(big.NewInt(150)) != 0 {
 		t.Error("Wrong remaining quantity")
 	}
 }

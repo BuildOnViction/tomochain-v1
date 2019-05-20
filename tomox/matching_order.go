@@ -14,10 +14,10 @@ import (
 type MatchingOrder struct {
 
 	// buy order information
-	Buy *OrderItem `json:"buy,omitempty"`
+	Buy *Order `json:"buy,omitempty"`
 
 	// sell order information
-	Sell *OrderItem `json:"sell,omitempty"`
+	Sell *Order `json:"sell,omitempty"`
 
 	Hash common.Hash `json:"hash,omitempty"`
 
@@ -299,14 +299,3 @@ func (o *MatchingOrder) ValidatePairBySymbol() error {
 	}
 	return nil
 }
-
-/**********************
-* validate relayer    *
-***********************/
-//func (o *MatchingOrder) IsSameRelayer() error {
-//	// same coinbase address of relayer
-//	if o.Buy.ExchangeAddress != o.Sell.ExchangeAddress {
-//		return ErrRelayerNotMatch
-//	}
-//	return nil
-//}

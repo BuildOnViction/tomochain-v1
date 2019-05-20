@@ -31,10 +31,10 @@ func TestMatchingOrder_ValidateSignature(t *testing.T) {
 	copy(sellAddress[:], crypto.Keccak256(sellPublicKeyBytes[1:])[12:])
 
 	order := &MatchingOrder{
-		Buy: &OrderItem{
+		Buy: &Order{
 			UserAddress: common.StringToAddress("aaa"), // assign arbitrary address
 		},
-		Sell: &OrderItem{
+		Sell: &Order{
 			UserAddress: common.StringToAddress("aaa"), // assign arbitrary address
 		},
 	}
@@ -100,10 +100,10 @@ func TestMatchingOrder_ValidateSignature(t *testing.T) {
 
 func TestMatchingOrder_ValidateOrderType(t *testing.T) {
 	order := &MatchingOrder{
-		Buy: &OrderItem{
+		Buy: &Order{
 			Type: "XX",
 		},
-		Sell: &OrderItem{
+		Sell: &Order{
 			Type: "XL",
 		},
 	}
@@ -124,10 +124,10 @@ func TestMatchingOrder_ValidateOrderType(t *testing.T) {
 
 func TestMatchingOrder_ValidateOrderSide(t *testing.T) {
 	order := &MatchingOrder{
-		Buy: &OrderItem{
+		Buy: &Order{
 			Side: Ask,
 		},
-		Sell: &OrderItem{
+		Sell: &Order{
 			Side: "aaa",
 		},
 	}
@@ -146,11 +146,11 @@ func TestMatchingOrder_ValidateOrderSide(t *testing.T) {
 
 func TestMatchingOrder_ValidateTimestamp(t *testing.T) {
 	order := &MatchingOrder{
-		Buy: &OrderItem{
+		Buy: &Order{
 			CreatedAt: uint64(time.Now().Unix()) + 1000, // future time
 			UpdatedAt: uint64(time.Now().Unix()) + 1000, // future time
 		},
-		Sell: &OrderItem{
+		Sell: &Order{
 			CreatedAt: uint64(time.Now().Unix()) + 1000, // future time
 			UpdatedAt: uint64(time.Now().Unix()) + 1000, // future time
 		},
@@ -175,10 +175,10 @@ func TestMatchingOrder_ValidateTimestamp(t *testing.T) {
 
 func TestMatchingOrder_ValidatePrice(t *testing.T) {
 	order := &MatchingOrder{
-		Buy: &OrderItem{
+		Buy: &Order{
 			Price: big.NewInt(100),
 		},
-		Sell: &OrderItem{
+		Sell: &Order{
 			Price: big.NewInt(105),
 		},
 		MatchedPrice: big.NewInt(90),
@@ -212,11 +212,11 @@ func TestMatchingOrder_ValidatePrice(t *testing.T) {
 
 func TestMatchingOrder_ValidateQuantity(t *testing.T) {
 	order := &MatchingOrder{
-		Buy: &OrderItem{
+		Buy: &Order{
 			Quantity:     big.NewInt(100),
 			FilledAmount: big.NewInt(90),
 		},
-		Sell: &OrderItem{
+		Sell: &Order{
 			Quantity:     big.NewInt(105),
 			FilledAmount: big.NewInt(80),
 		},
@@ -258,10 +258,10 @@ func TestMatchingOrder_ValidateQuantity(t *testing.T) {
 
 func TestMatchingOrder_ValidatePairBySymbol(t *testing.T) {
 	order := &MatchingOrder{
-		Buy: &OrderItem{
+		Buy: &Order{
 			PairName: "MAXBET/TOMO",
 		},
-		Sell: &OrderItem{
+		Sell: &Order{
 			PairName: "ETH/TOMO",
 		},
 	}
@@ -281,11 +281,11 @@ func TestMatchingOrder_ValidatePairBySymbol(t *testing.T) {
 
 func TestMatchingOrder_ValidatePairByTokenAddress(t *testing.T) {
 	order := &MatchingOrder{
-		Buy: &OrderItem{
+		Buy: &Order{
 			BaseToken:  common.StringToAddress("0x1111111111111111111111111"),
 			QuoteToken: common.StringToAddress("0x2222222222222222222222222"),
 		},
-		Sell: &OrderItem{
+		Sell: &Order{
 			BaseToken:  common.StringToAddress("0x1111111111111111111111111"),
 			QuoteToken: common.StringToAddress("0x3333333333333333333333333"),
 		},
@@ -309,32 +309,14 @@ func TestMatchingOrder_ValidatePairByTokenAddress(t *testing.T) {
 	}
 }
 
-//func TestMatchingOrder_IsSameRelayer(t *testing.T) {
-//	order := &MatchingOrder{
-//		Buy: &OrderItem{
-//			ExchangeAddress: common.StringToAddress("relayer1"),
-//		},
-//		Sell: &OrderItem{
-//			ExchangeAddress: common.StringToAddress("relayer2"),
-//		},
-//	}
-//	if err := order.IsSameRelayer(); err != ErrRelayerNotMatch {
-//		t.Error("FAILED. BuyOrder and sellOrder are different relayers")
-//	}
-//	order.Sell.ExchangeAddress = common.StringToAddress("relayer1")
-//	if err := order.IsSameRelayer(); err != nil {
-//		t.Error("FAILED.", err)
-//	}
-//}
-
 func TestMatchingOrder_ValidateHash(t *testing.T) {
 	order := &MatchingOrder{
-		Buy: &OrderItem{
+		Buy: &Order{
 			Price:     big.NewInt(100),
 			CreatedAt: uint64(time.Now().Unix()) - 1000, // passed time
 			UpdatedAt: uint64(time.Now().Unix()) - 1000, // passed time
 		},
-		Sell: &OrderItem{
+		Sell: &Order{
 			Price:     big.NewInt(105),
 			CreatedAt: uint64(time.Now().Unix()) - 1000, // passed time
 			UpdatedAt: uint64(time.Now().Unix()) - 1000, // passed time

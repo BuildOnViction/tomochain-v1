@@ -1094,10 +1094,6 @@ func updateOrderBook(tomoX *tomox.TomoX, tx *types.Transaction) error {
 		if err = updateOrderQuantity(tomoX, orderBook, order.Buy, remainingBuy); err == nil {
 			err = updateOrderQuantity(tomoX, orderBook, order.Sell, remainingSell)
 		}
-		if err != nil {
-			orderBook.Restore()
-			return err
-		}
 		return orderBook.Save()
 
 	} else {
@@ -1105,29 +1101,28 @@ func updateOrderBook(tomoX *tomox.TomoX, tx *types.Transaction) error {
 	}
 }
 
-func updateOrderQuantity(tomoX *tomox.TomoX, ob *tomox.OrderBook, o *tomox.OrderItem, remaining *big.Int) error {
-	var orderTree *tomox.OrderTree
+func updateOrderQuantity(tomoX *tomox.TomoX, ob *tomox.OrderBook, o *tomox.Order, remaining *big.Int) error {
+	var (
+		orderTree *tomox.OrderTree
+		err error
+	)
+	pairName := strings.ToLower(o.PairName)
 	if o.Side == tomox.Bid {
-		orderTree = ob.Bids
+		if orderTree, err = tomoX.GetBidsTree(pairName); err != nil {
+			return err
+		}
 	} else {
-		orderTree = ob.Asks
+		if orderTree, err = tomoX.GetAsksTree(pairName); err != nil {
+			return err
+		}
 	}
 	o.Quantity = remaining
 	if remaining.Cmp(big.NewInt(0)) != 0 {
-		// update quantity of order in orderbook
-		o.UpdatedAt = uint64(time.Now().Unix())
-		if err := ob.UpdateOrder(o); err != nil {
-			return err
-		}
+		ob.UpdateOrder(o)
 
 	} else {
 		// remove order from orderbook
-		removingOrder := tomoX.GetOrder(strings.ToLower(o.PairName), strconv.FormatUint(o.OrderID, 10))
-		if removingOrder != nil {
-			if _, err := orderTree.RemoveOrder(removingOrder); err != nil {
-				return err
-			}
-		}
+		orderTree.RemoveOrderById(strconv.FormatUint(o.OrderID, 10))
 	}
 	return nil
 }
