@@ -17,7 +17,7 @@ import (
 
 const (
 	filterTimeout = 300 // filters are considered timeout out after filterTimeout seconds
-	LimitThresholdOrderNonceInQueue = 10
+	LimitThresholdOrderNonceInQueue = 100
 )
 
 // List of errors
