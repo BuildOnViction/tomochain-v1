@@ -298,16 +298,19 @@ func (orderTree *OrderTree) UpdateOrder(orderItem *OrderItem) error {
 
 func (orderTree *OrderTree) RemoveOrderFromOrderList(order *Order, orderList *OrderList) error {
 	// next update orderList
-	err := orderList.RemoveOrder(order)
+	if err := orderList.RemoveOrder(order); err != nil {
+		return err
+	}
 
-	if err != nil {
+	// snapshot order list
+	if err := orderList.Save(); err != nil {
 		return err
 	}
 
 	// no items left than safety remove
 	if orderList.Item.Length == uint64(0) {
 		orderTree.RemovePrice(order.Item.Price)
-		fmt.Println("REMOVE price list", order.Item.Price.String())
+		log.Debug("remove price list", "price", order.Item.Price.String())
 	}
 
 	// update orderTree
@@ -317,14 +320,19 @@ func (orderTree *OrderTree) RemoveOrderFromOrderList(order *Order, orderList *Or
 	orderTree.Item.NumOrders--
 
 	// should use batch to optimize the performance
-	return orderTree.Save()
+	return nil
 }
 
-func (orderTree *OrderTree) RemoveOrder(order *Order) (error) {
+func (orderTree *OrderTree) RemoveOrder(order *Order) error {
 	// get orderList by price. If there is orderlist existed, update it
 	orderList := orderTree.PriceList(order.Item.Price)
 	if orderList != nil {
 		if err := orderTree.RemoveOrderFromOrderList(order, orderList); err != nil {
+			return err
+		}
+
+		// snapshot ordertree
+		if err := orderTree.Save(); err != nil {
 			return err
 		}
 	}
