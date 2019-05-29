@@ -81,7 +81,7 @@ func TestCreateOrder(t *testing.T) {
 }
 
 func TestCreate10Orders(t *testing.T) {
-	for i := 0; i <= 20; i++ {
+	for i := 0; i <= 10; i++ {
 		TestCreateOrder(t)
 		time.Sleep(1 * time.Second)
 	}

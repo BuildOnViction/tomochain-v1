@@ -435,7 +435,7 @@ func (tomox *TomoX) postEvent(envelope *Envelope, isP2P bool) error {
 		log.Debug("Cancelled order", "detail", order)
 	} else {
 		log.Info("Save order", "detail", order)
-		trades, orderInBook, err := tomox.ProcessOrder(order)
+		trades, orderInBook, err := tomox.SaveOrderPending(order)
 		if err != nil {
 			log.Error("Can't process order", "err", err)
 			return err
@@ -611,6 +611,35 @@ func (tomox *TomoX) GetOrder(pairName, orderID string) *Order {
 	return ob.GetOrder(key)
 }
 
+func (tomox *TomoX) SaveOrderPending(order *OrderItem) ([]map[string]string, *OrderItem, error) {
+	ob, _ := tomox.getAndCreateIfNotExisted(pendingOrder)
+	var trades []map[string]string
+	var orderInBook *OrderItem
+
+	if ob != nil {
+		// insert
+		if order.OrderID == 0 {
+			// Save order into orderbook tree.
+			log.Info("Save order pending")
+			err := ob.SaveOrderPending(order)
+			if err != nil {
+				log.Error("Error Save Order Pending", "error", err)
+			}
+			//log.Info("Process order")
+			//trades, orderInBook = ob.ProcessOrder(order, true)
+		} else {
+			log.Info("Update order pending")
+			err := ob.UpdateOrder(order)
+			if err != nil {
+				log.Error("Update order failed", "order", order, "err", err)
+				return trades, orderInBook, err
+			}
+		}
+	}
+
+	return trades, orderInBook, nil
+}
+
 func (tomox *TomoX) ProcessOrder(order *OrderItem) ([]map[string]string, *OrderItem, error) {
 	ob, _ := tomox.getAndCreateIfNotExisted(order.PairName)
 	var trades []map[string]string
@@ -619,16 +648,10 @@ func (tomox *TomoX) ProcessOrder(order *OrderItem) ([]map[string]string, *OrderI
 	if ob != nil {
 		// insert
 		if order.OrderID == 0 {
-			// Save order into orderbook tree.
-			log.Info("Process saved")
-			err := ob.SaveOrderPending(order)
-			if err != nil {
-				log.Error("Error Save Order Pending", "error", err)
-			}
-			//log.Info("Process order")
-			//trades, orderInBook = ob.ProcessOrder(order, true)
+			log.Info("Process order")
+			trades, orderInBook = ob.ProcessOrder(order, true)
 		} else {
-			log.Info("Update order")
+			log.Info("Update order pending")
 			err := ob.UpdateOrder(order)
 			if err != nil {
 				log.Error("Update order failed", "order", order, "err", err)
@@ -665,7 +688,7 @@ func (tomox *TomoX) GetAsksTree(pairName string) (*OrderTree, error) {
 	return ob.Asks, nil
 }
 
-func (tomox *TomoX) ProcessOrderPending() {
+func (tomox *TomoX) ProcessOrderPending() error {
 	// Get best max bids.
 	ob, _ := tomox.getAndCreateIfNotExisted(pendingOrder)
 	maxBidList := ob.PendingBids.MaxPriceList()
@@ -693,8 +716,14 @@ func (tomox *TomoX) ProcessOrderPending() {
 	for _, order := range orderPendings {
 		if order != nil {
 			order.Item.OrderID = zero.Uint64()
-			log.Info("Process order pending", "orderPending", order.Item)
-			tomox.ProcessOrder(order.Item)
+			trades, orderInBook, err := tomox.ProcessOrder(order.Item)
+			if err != nil {
+				log.Error("Can't process order", "err", err)
+				return err
+			}
+			log.Info("ORDERBOOK RESULT", "Trade", trades, "OrderInBook", orderInBook)
 		}
 	}
+
+	return nil
 }
