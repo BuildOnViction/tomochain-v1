@@ -287,6 +287,18 @@ func (tx *Transaction) IsSpecialTransaction() bool {
 	return tx.To().String() == common.RandomizeSMC || tx.To().String() == common.BlockSigners || tx.To().String() == common.TomoXAddr
 }
 
+func (tx *Transaction) IsMatchingTransaction() bool {
+	if tx.To() == nil {
+		return false
+	}
+
+	if tx.To().String() != common.TomoXAddr {
+		return false
+	}
+
+	return true
+}
+
 func (tx *Transaction) IsSigningTransaction() bool {
 	if tx.To() == nil {
 		return false

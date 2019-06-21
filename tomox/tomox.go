@@ -1060,6 +1060,25 @@ func (tomox *TomoX) getProcessedOrderHash() []common.Hash {
 	return processedHashes
 }
 
+func (tomox *TomoX) MarkOrderAsProcessed(hash common.Hash) error {
+
+	if err := tomox.addProcessedOrderHash(hash, 1000); err != nil {
+		log.Error("Fail to save processed order hash", "err", err)
+		return err
+	}
+
+	// Remove order from db pending.
+	if err := tomox.removePendingHash(hash); err != nil {
+		log.Error("Fail to remove pending hash", "err", err)
+		return err
+	}
+	if err := tomox.removeOrderPending(hash); err != nil {
+		log.Error("Fail to remove order pending", "err", err)
+		return err
+	}
+	return nil
+}
+
 func (tomox *TomoX) updatePairs(pairs map[string]bool) error {
 	blob, err := json.Marshal(pairs)
 	if err != nil {

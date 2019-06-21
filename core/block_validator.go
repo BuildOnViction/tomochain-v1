@@ -85,9 +85,17 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 		return tomox.ErrTomoXServiceNotFound
 	}
 
+	currentState, err := v.bc.State()
+	if err != nil {
+		return err
+	}
 	for _, tx := range block.Transactions() {
 		if tx.IsMatchingTransaction() {
 			log.Debug("process tx match")
+			if err = v.validateMatchedOrder(tomoXService, currentState, tx); err != nil {
+				return err
+			}
+
 			txMatch := &tomox.TxDataMatch{}
 			if err := json.Unmarshal(tx.Data(), txMatch); err != nil {
 				return fmt.Errorf("transaction match is corrupted. Failed unmarshal. Error: ", err)
@@ -159,6 +167,48 @@ func (v *BlockValidator) ValidateState(block, parent *types.Block, statedb *stat
 	}
 	return nil
 }
+
+func (v *BlockValidator) validateMatchedOrder(tomoXService *tomox.TomoX, currentState *state.StateDB, tx *types.Transaction) error {
+	var txMatch *tomox.TxDataMatch
+	if err := json.Unmarshal(tx.Data(), &txMatch); err != nil {
+		return err
+	}
+
+	// verify orderItem
+	order, err := txMatch.DecodeOrder()
+	if err != nil {
+		return err
+	}
+	if err := order.VerifyMatchedOrder(currentState); err != nil {
+		return err
+	}
+
+	// verify old state: orderbook hash, bidTree hash, askTree hash
+	ob, err := tomoXService.GetOrderBook(order.PairName)
+	if err != nil {
+		return err
+	}
+	if err := txMatch.VerifyOldTomoXState(ob); err != nil {
+		return err
+	}
+	// process Matching Engine
+	ob.ProcessOrder(order, true)
+
+	// update pending hash, processedHash
+	if err := tomoXService.MarkOrderAsProcessed(order.Hash); err != nil {
+		return err
+	}
+	// verify new state
+	if err := txMatch.VerifyNewTomoXState(ob); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+//func rejectBlockContainFailedTxMatched()  {
+//
+//}
 
 // CalcGasLimit computes the gas limit of the next block after parent.
 // This is miner strategy, not consensus protocol.
