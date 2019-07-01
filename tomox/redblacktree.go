@@ -651,3 +651,9 @@ func nodeColor(node *Node) bool {
 func (tree *Tree) deleteNode(node *Node, force bool) {
 	tree.db.Delete(node.Key, force)
 }
+
+
+func (tree *Tree) Clone() *Tree {
+	clone := *tree
+	return &clone
+}

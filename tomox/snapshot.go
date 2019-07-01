@@ -65,7 +65,12 @@ func newSnapshot(tomox *TomoX, blockHash common.Hash) (*Snapshot, error) {
 	snap := new(Snapshot)
 	snap.Hash = blockHash
 	snap.OrderBooks = make(map[string]*OrderBookSnapshot)
-	for pair, ob := range tomox.Orderbooks {
+	for _, pair := range tomox.listTokenPairs() {
+		var ob *OrderBook
+		ob, err = tomox.GetOrderBook(pair)
+		if err != nil {
+			return nil, err
+		}
 		obSnap := new(OrderBookSnapshot)
 		encodedBytes, err = EncodeBytesItem(ob.Item)
 		if err != nil {

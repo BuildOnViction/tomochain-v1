@@ -29,7 +29,8 @@ var (
 	errInvalidRelayer          = errors.New("verify matched order: invalid relayer")
 	errInvalidOrderType        = errors.New("verify matched order: unsupported order type: Limit/Market")
 	errInvalidOrderSide        = errors.New("verify matched order: invalid order side")
-	errInvalidOrderTreeHash    = errors.New("verify matched order: invalid ordertree hash")
+	errOrderBookHashNotMatch   = errors.New("verify matched order: orderbook hash not match")
+	errOrderTreeHashNotMatch   = errors.New("verify matched order: ordertree hash not match")
 
 	// supported order types
 	MatchingOrderType = map[string]bool{
@@ -206,19 +207,19 @@ func GetTokenBalance(statedb *state.StateDB, address common.Address, contractAdd
 func (tx *TxDataMatch) VerifyOldTomoXState(ob *OrderBook) error {
 	// verify orderbook
 	if hash, err := ob.Hash(); err != nil || hash != tx.obOld {
-		return errInvalidOrderBookHash
+		return errOrderBookHashNotMatch
 	}
 
 	// verify order trees
 	// bidTree tree
 	bidTree := ob.Bids
 	if hash, err := bidTree.Hash(); err != nil || hash != tx.bidOld {
-		return errInvalidOrderTreeHash
+		return errOrderTreeHashNotMatch
 	}
 	// askTree tree
 	askTree := ob.Asks
 	if hash, err := askTree.Hash(); err != nil || hash != tx.askOld {
-		return errInvalidOrderTreeHash
+		return errOrderTreeHashNotMatch
 	}
 	return nil
 }
@@ -227,19 +228,19 @@ func (tx *TxDataMatch) VerifyOldTomoXState(ob *OrderBook) error {
 func (tx *TxDataMatch) VerifyNewTomoXState(ob *OrderBook) error {
 	// verify orderbook
 	if hash, err := ob.Hash(); err != nil || hash != tx.obNew {
-		return errInvalidOrderBookHash
+		return errOrderBookHashNotMatch
 	}
 
 	// verify order trees
 	// bidTree tree
 	bidTree := ob.Bids
 	if hash, err := bidTree.Hash(); err != nil || hash != tx.bidNew {
-		return errInvalidOrderTreeHash
+		return errOrderTreeHashNotMatch
 	}
 	// askTree tree
 	askTree := ob.Asks
 	if hash, err := askTree.Hash(); err != nil || hash != tx.askNew {
-		return errInvalidOrderTreeHash
+		return errOrderTreeHashNotMatch
 	}
 	return nil
 }

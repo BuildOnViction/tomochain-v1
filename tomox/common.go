@@ -3,8 +3,8 @@ package tomox
 import (
 	"encoding/json"
 	"errors"
-	"math/big"
 	"github.com/ethereum/go-ethereum/common"
+	"math/big"
 )
 
 type Comparator func(a, b []byte) int
@@ -13,9 +13,12 @@ type DecodeBytes func([]byte, interface{}) error
 type FormatBytes func([]byte) string
 
 const (
-	TrueByte  = byte(1)
-	FalseByte = byte(0)
-	decimals  = 18
+	TrueByte               = byte(1)
+	FalseByte              = byte(0)
+	decimals               = 18
+	TomoXCloneModeBackup   = "backup"
+	TomoXCloneModeRollback = "rollback"
+	backupPrefix           = "backup_"
 )
 
 var (

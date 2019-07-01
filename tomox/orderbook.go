@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
+	"encoding/hex"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
-	"encoding/hex"
 	"github.com/pkg/errors"
 )
 
@@ -54,7 +54,7 @@ type OrderBookItemRecordBSON struct {
 
 // OrderBook : list of orders
 type OrderBook struct {
-	db   OrderDao // this is for orderBook
+	db   OrderDao   // this is for orderBook
 	Bids *OrderTree `json:"bids"`
 	Asks *OrderTree `json:"asks"`
 	Item *OrderBookItem
@@ -161,7 +161,7 @@ func (orderBook *OrderBook) GetOrderIDFromKey(key []byte) []byte {
 }
 
 func (orderBook *OrderBook) GetOrder(storedKey, key []byte) *Order {
-	if orderBook.db.IsEmptyKey(key) || orderBook.db.IsEmptyKey(storedKey){
+	if orderBook.db.IsEmptyKey(key) || orderBook.db.IsEmptyKey(storedKey) {
 		return nil
 	}
 	orderItem := &OrderItem{}
@@ -216,9 +216,9 @@ func (orderBook *OrderBook) WorstAsk() (value *big.Int) {
 // processMarketOrder : process the market order
 func (orderBook *OrderBook) processMarketOrder(order *OrderItem, verbose bool) ([]map[string]string, error) {
 	var (
-		trades []map[string]string
+		trades    []map[string]string
 		newTrades []map[string]string
-		err error
+		err       error
 	)
 	quantityToTrade := order.Quantity
 	side := order.Side
@@ -250,10 +250,10 @@ func (orderBook *OrderBook) processMarketOrder(order *OrderItem, verbose bool) (
 // If not care for performance, we should make a copy of quote to prevent further reference problem
 func (orderBook *OrderBook) processLimitOrder(order *OrderItem, verbose bool) ([]map[string]string, *OrderItem, error) {
 	var (
-		trades []map[string]string
-		newTrades []map[string]string
+		trades      []map[string]string
+		newTrades   []map[string]string
 		orderInBook *OrderItem
-		err error
+		err         error
 	)
 	quantityToTrade := order.Quantity
 	side := order.Side
@@ -307,8 +307,8 @@ func (orderBook *OrderBook) processLimitOrder(order *OrderItem, verbose bool) ([
 func (orderBook *OrderBook) ProcessOrder(order *OrderItem, verbose bool) ([]map[string]string, *OrderItem, error) {
 	var (
 		orderInBook *OrderItem
-		trades []map[string]string
-		err error
+		trades      []map[string]string
+		err         error
 	)
 	orderType := order.Type
 	orderBook.UpdateTime()
@@ -487,4 +487,36 @@ func (orderBook *OrderBook) Hash() (common.Hash, error) {
 		return common.Hash{}, err
 	}
 	return common.BytesToHash(obEncoded), nil
+}
+
+func (orderBook *OrderBook) Clone(mode string) (*OrderBook, error) {
+	key := orderBook.Key
+	if mode == TomoXCloneModeBackup {
+		key = append([]byte(backupPrefix), key...)
+	} else if mode == TomoXCloneModeRollback {
+		// remove backup prefix
+		key = key[len([]byte(backupPrefix)):]
+	}
+	clone := &OrderBook{
+		db:   orderBook.db,
+		Item: orderBook.Item.Clone(),
+		Key:  key,
+		Slot: CloneBigInt(orderBook.Slot),
+	}
+	bidTree, err := orderBook.Bids.Clone(clone, mode)
+	if err != nil {
+		return nil, err
+	}
+	clone.Bids = bidTree
+	askTree, err := orderBook.Asks.Clone(clone, mode)
+	if err != nil {
+		return nil, err
+	}
+	clone.Asks = askTree
+	return clone, nil
+}
+
+func (item *OrderBookItem) Clone() *OrderBookItem {
+	clone := *item
+	return &clone
 }

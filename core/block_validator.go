@@ -89,12 +89,41 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 	if err != nil {
 		return err
 	}
+	processedData := []map[string][]byte{}
+
+	// validate matchedOrder txs
 	for _, tx := range block.Transactions() {
 		if tx.IsMatchingTransaction() {
 			log.Debug("process tx match")
-			if err = v.validateMatchedOrder(tomoXService, currentState, tx); err != nil {
-				return err
+			order := &tomox.OrderItem{}
+			ol := &tomox.OrderList{}
+
+			order, ol, err = v.validateMatchedOrder(tomoXService, currentState, tx)
+			if order != nil {
+				var (
+					encodedOrderItem []byte
+					encodedOrderList []byte
+				)
+				encodedOrderItem, err = tomox.EncodeBytesItem(order)
+				if err != nil {
+					break
+				}
+				if ol != nil {
+					encodedOrderList, err = tomox.EncodeBytesItem(ol)
+					if err != nil {
+						break
+					}
+				}
+
+				processedData = append(processedData, map[string][]byte{
+					"orderItem": encodedOrderItem,
+					"orderList": encodedOrderList,
+				})
 			}
+			if err != nil {
+				break
+			}
+
 
 			txMatch := &tomox.TxDataMatch{}
 			if err := json.Unmarshal(tx.Data(), txMatch); err != nil {
@@ -136,7 +165,13 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 			}
 		}
 	}
-
+	if err != nil {
+		// rollback
+		if err := tomoXService.Rollback(processedData); err != nil {
+			return fmt.Errorf("validateMatchedOrder failed. Failed to rollback. %s", err.Error())
+		}
+		return err
+	}
 	return nil
 }
 
@@ -168,47 +203,58 @@ func (v *BlockValidator) ValidateState(block, parent *types.Block, statedb *stat
 	return nil
 }
 
-func (v *BlockValidator) validateMatchedOrder(tomoXService *tomox.TomoX, currentState *state.StateDB, tx *types.Transaction) error {
-	var txMatch *tomox.TxDataMatch
-	if err := json.Unmarshal(tx.Data(), &txMatch); err != nil {
-		return err
+// an order (type *tomox.OrderItem) is returned to let us know which orders has been processed
+// it's important information for rolling back in case of failure
+func (v *BlockValidator) validateMatchedOrder(tomoXService *tomox.TomoX, currentState *state.StateDB, tx *types.Transaction) (*tomox.OrderItem, *tomox.OrderList, error) {
+	txMatch := &tomox.TxDataMatch{}
+	if err := json.Unmarshal(tx.Data(), txMatch); err != nil {
+		return nil, nil, err
 	}
 
 	// verify orderItem
 	order, err := txMatch.DecodeOrder()
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	if err := order.VerifyMatchedOrder(currentState); err != nil {
-		return err
+		return nil, nil, err
 	}
 
 	// verify old state: orderbook hash, bidTree hash, askTree hash
 	ob, err := tomoXService.GetOrderBook(order.PairName)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	if err := txMatch.VerifyOldTomoXState(ob); err != nil {
-		return err
+		return nil, nil, err
 	}
+
+	var ol *tomox.OrderList
+	if len(txMatch.GetTrades()) > 0 {
+		if order.Side == tomox.Bid {
+			ol = ob.Asks.MinPriceList()
+		} else {
+			ol = ob.Bids.MaxPriceList()
+		}
+	}
+
 	// process Matching Engine
-	ob.ProcessOrder(order, true)
+	if _, _, err := ob.ProcessOrder(order, true); err != nil {
+		return nil, nil, err
+	}
 
 	// update pending hash, processedHash
 	if err := tomoXService.MarkOrderAsProcessed(order.Hash); err != nil {
-		return err
+		return order, ol, err
 	}
 	// verify new state
 	if err := txMatch.VerifyNewTomoXState(ob); err != nil {
-		return err
+		return order, ol, err
 	}
 
-	return nil
+	return order, ol, nil
 }
 
-//func rejectBlockContainFailedTxMatched()  {
-//
-//}
 
 // CalcGasLimit computes the gas limit of the next block after parent.
 // This is miner strategy, not consensus protocol.

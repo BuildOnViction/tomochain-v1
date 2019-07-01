@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rpc"
 	"math/big"
 	"math/rand"
@@ -183,7 +184,6 @@ func TestTomoX_GetActivePairs(t *testing.T) {
 		t.Error("Failed to save active pairs", err)
 	}
 
-
 	// try to commit to see if there is any error with rlp encode
 	if err := tomox.db.Commit(); err != nil {
 		t.Errorf(err.Error())
@@ -360,5 +360,350 @@ func TestTomoX_VerifyOrderNonce(t *testing.T) {
 	order.UserAddress = common.StringToAddress("0x0022")
 	if err := tomox.verifyOrderNonce(order); err != nil {
 		t.Error("Expected: no error")
+	}
+}
+
+var v = []byte(string(rand.Intn(999)))
+
+func prepareTestOrders() []*OrderItem {
+	orders := []*OrderItem{}
+	// insert order to bid tree: price 99
+	price := CloneBigInt(ether)
+	orders = append(orders, &OrderItem{
+		OrderID:         uint64(1),
+		Quantity:        big.NewInt(100),
+		Price:           price.Mul(price, big.NewInt(99)),
+		ExchangeAddress: common.StringToAddress("0x0000000000000000000000000000000000000000"),
+		UserAddress:     common.StringToAddress("0xf069080f7acb9a6705b4a51f84d9adc67b921bdf"),
+		BaseToken:       common.StringToAddress("0x9a8531c62d02af08cf237eb8aecae9dbcb69b6fd"),
+		QuoteToken:      common.StringToAddress("0x9a8531c62d02af08cf237eb8aecae9dbcb69b6fd"),
+		Status:          "New",
+		Side:            Bid,
+		Type:            "LO",
+		PairName:        "aaa/tomo",
+		Hash:            common.StringToHash(string(rand.Intn(1000))),
+		Signature: &Signature{
+			V: v[0],
+			R: common.StringToHash("0xe386313e32a83eec20ecd52a5a0bd6bb34840416080303cecda556263a9270d0"),
+			S: common.StringToHash("0x05cd5304c5ead37b6fac574062b150db57a306fa591c84fc4c006c4155ebda2a"),
+		},
+		FilledAmount: new(big.Int).SetUint64(0),
+		Nonce:        new(big.Int).SetUint64(1),
+		MakeFee:      new(big.Int).SetUint64(4000000000000000),
+		TakeFee:      new(big.Int).SetUint64(4000000000000000),
+		CreatedAt:    uint64(time.Now().Unix()),
+		UpdatedAt:    uint64(time.Now().Unix()),
+	})
+
+	// insert order to bid tree: price 98
+	price = CloneBigInt(ether)
+	orders = append(orders, &OrderItem{
+		OrderID:         uint64(2),
+		Quantity:        big.NewInt(50),
+		Price:           price.Mul(price, big.NewInt(98)),
+		ExchangeAddress: common.StringToAddress("0x0000000000000000000000000000000000000000"),
+		UserAddress:     common.StringToAddress("0xf069080f7acb9a6705b4a51f84d9adc67b921bdf"),
+		BaseToken:       common.StringToAddress("0x9a8531c62d02af08cf237eb8aecae9dbcb69b6fd"),
+		QuoteToken:      common.StringToAddress("0x9a8531c62d02af08cf237eb8aecae9dbcb69b6fd"),
+		Status:          "New",
+		Side:            Bid,
+		Type:            "LO",
+		PairName:        "aaa/tomo",
+		Hash:            common.StringToHash(string(rand.Intn(1000))),
+		Signature: &Signature{
+			V: v[0],
+			R: common.StringToHash("0xe386313e32a83eec20ecd52a5a0bd6bb34840416080303cecda556263a9270d0"),
+			S: common.StringToHash("0x05cd5304c5ead37b6fac574062b150db57a306fa591c84fc4c006c4155ebda2a"),
+		},
+		FilledAmount: new(big.Int).SetUint64(0),
+		Nonce:        new(big.Int).SetUint64(2),
+		MakeFee:      new(big.Int).SetUint64(4000000000000000),
+		TakeFee:      new(big.Int).SetUint64(4000000000000000),
+		CreatedAt:    uint64(time.Now().Unix()),
+		UpdatedAt:    uint64(time.Now().Unix()),
+	})
+
+	// insert order to ask tree: price 101
+	price = CloneBigInt(ether)
+	orders = append(orders, &OrderItem{
+		OrderID:         uint64(3),
+		Quantity:        big.NewInt(200),
+		Price:           price.Mul(price, big.NewInt(101)),
+		ExchangeAddress: common.StringToAddress("0x0000000000000000000000000000000000000000"),
+		UserAddress:     common.StringToAddress("0xf069080f7acb9a6705b4a51f84d9adc67b921bdf"),
+		BaseToken:       common.StringToAddress("0x9a8531c62d02af08cf237eb8aecae9dbcb69b6fd"),
+		QuoteToken:      common.StringToAddress("0x9a8531c62d02af08cf237eb8aecae9dbcb69b6fd"),
+		Status:          "New",
+		Side:            Ask,
+		Type:            "LO",
+		PairName:        "aaa/tomo",
+		Hash:            common.StringToHash(string(rand.Intn(1000))),
+		Signature: &Signature{
+			V: v[0],
+			R: common.StringToHash("0xe386313e32a83eec20ecd52a5a0bd6bb34840416080303cecda556263a9270d0"),
+			S: common.StringToHash("0x05cd5304c5ead37b6fac574062b150db57a306fa591c84fc4c006c4155ebda2a"),
+		},
+		FilledAmount: new(big.Int).SetUint64(0),
+		Nonce:        new(big.Int).SetUint64(3),
+		MakeFee:      new(big.Int).SetUint64(4000000000000000),
+		TakeFee:      new(big.Int).SetUint64(4000000000000000),
+		CreatedAt:    uint64(time.Now().Unix()),
+		UpdatedAt:    uint64(time.Now().Unix()),
+	})
+
+	// insert order to ask tree: price 102
+	price = CloneBigInt(ether)
+	orders = append(orders, &OrderItem{
+		OrderID:         uint64(4),
+		Quantity:        big.NewInt(300),
+		Price:           price.Mul(price, big.NewInt(102)),
+		ExchangeAddress: common.StringToAddress("0x0000000000000000000000000000000000000000"),
+		UserAddress:     common.StringToAddress("0xf069080f7acb9a6705b4a51f84d9adc67b921bdf"),
+		BaseToken:       common.StringToAddress("0x9a8531c62d02af08cf237eb8aecae9dbcb69b6fd"),
+		QuoteToken:      common.StringToAddress("0x9a8531c62d02af08cf237eb8aecae9dbcb69b6fd"),
+		Status:          "New",
+		Side:            Ask,
+		Type:            "LO",
+		PairName:        "aaa/tomo",
+		Hash:            common.StringToHash(string(rand.Intn(1000))),
+		Signature: &Signature{
+			V: v[0],
+			R: common.StringToHash("0xe386313e32a83eec20ecd52a5a0bd6bb34840416080303cecda556263a9270d0"),
+			S: common.StringToHash("0x05cd5304c5ead37b6fac574062b150db57a306fa591c84fc4c006c4155ebda2a"),
+		},
+		FilledAmount: new(big.Int).SetUint64(0),
+		Nonce:        new(big.Int).SetUint64(4),
+		MakeFee:      new(big.Int).SetUint64(4000000000000000),
+		TakeFee:      new(big.Int).SetUint64(4000000000000000),
+		CreatedAt:    uint64(time.Now().Unix()),
+		UpdatedAt:    uint64(time.Now().Unix()),
+	})
+	return orders
+}
+
+func TestTomoX_BackupAndRollback(t *testing.T) {
+	testDir := "TestTomoX_BackupAndRollback"
+
+	tomox := &TomoX{
+		Orderbooks:  map[string]*OrderBook{},
+		orderCount:  map[common.Address]*big.Int{},
+		activePairs: map[string]bool{},
+		db: NewLDBEngine(&Config{
+			DataDir:  testDir,
+			DBEngine: "leveldb",
+		}),
+	}
+	defer os.RemoveAll(testDir)
+
+	var err error
+	var ob *OrderBook
+	pair := "aaa/tomo"
+	ob, err = tomox.GetOrderBook(pair)
+	if ob == nil || err != nil {
+		t.Error("Can not get orderbook", pair, err)
+	}
+	for _, order := range prepareTestOrders() {
+		if err := tomox.InsertOrder(order); err != nil {
+			t.Error(err)
+		}
+		if _, _, err := ob.ProcessOrder(order, false); err != nil {
+			t.Error(err)
+		}
+	}
+	if err := ob.Save(); err != nil {
+		t.Error(err)
+	}
+	// backup orderbooks
+	if err := tomox.Backup(); err != nil {
+		t.Error(err)
+	}
+	processedData := []map[string][]byte{}
+
+	// TESTCASE1: processOrder generates a matchedOrder and remove some order from OrderTree
+	// expected:
+	//	- put the orderItem back to pending list
+	// 	- restore orderTree state (restore some existing orders which has been removed by matching engine)
+
+	// match order5 and order1
+	// order1 should be removed from orderTree
+	// order5 should be removed from order pending list
+	price := CloneBigInt(ether)
+	processedOrder := &OrderItem{
+		OrderID:         uint64(5),
+		Quantity:        big.NewInt(100),
+		Price:           price.Mul(price, big.NewInt(99)),
+		ExchangeAddress: common.StringToAddress("0x0000000000000000000000000000000000000000"),
+		UserAddress:     common.StringToAddress("0xf069080f7acb9a6705b4a51f84d9adc67b921bdf"),
+		BaseToken:       common.StringToAddress("0x9a8531c62d02af08cf237eb8aecae9dbcb69b6fd"),
+		QuoteToken:      common.StringToAddress("0x9a8531c62d02af08cf237eb8aecae9dbcb69b6fd"),
+		Status:          "New",
+		Side:            Ask,
+		Type:            "LO",
+		PairName:        "aaa/tomo",
+		Hash:            common.StringToHash(string(rand.Intn(1000))),
+		Signature: &Signature{
+			V: v[0],
+			R: common.StringToHash("0xe386313e32a83eec20ecd52a5a0bd6bb34840416080303cecda556263a9270d0"),
+			S: common.StringToHash("0x05cd5304c5ead37b6fac574062b150db57a306fa591c84fc4c006c4155ebda2a"),
+		},
+		FilledAmount: new(big.Int).SetUint64(0),
+		Nonce:        new(big.Int).SetUint64(5),
+		MakeFee:      new(big.Int).SetUint64(4000000000000000),
+		TakeFee:      new(big.Int).SetUint64(4000000000000000),
+		CreatedAt:    uint64(time.Now().Unix()),
+		UpdatedAt:    uint64(time.Now().Unix()),
+	}
+
+	encodedOrderList, err := EncodeBytesItem(ob.Bids.MaxPriceList())
+	if err != nil {
+		t.Error(err)
+	}
+	encodedOrderItem, err := EncodeBytesItem(processedOrder)
+	if err != nil {
+		t.Error(err)
+	}
+	processedData = append(processedData, map[string][]byte{
+		"orderItem": encodedOrderItem,
+		"orderList": encodedOrderList,
+	})
+	if _, _, err := ob.ProcessOrder(processedOrder, false); err != nil {
+		t.Error("failed to process order", err)
+	}
+
+	ob, err = tomox.GetOrderBook(pair)
+	if ob == nil || err != nil {
+		t.Error("Can not get orderbook", pair, err)
+	}
+	// bid tree had 2 orders
+	// after processing order, 1 order has been matched
+	// now it should have 1 order
+	if count := ob.Bids.PriceTree.size; count != 1 {
+		t.Error("Bid tree should have 1 order")
+		t.Error("Actual: ", count)
+	}
+
+	if err := tomox.Rollback(processedData); err != nil {
+		t.Error(err)
+	}
+	// after rolling back, bidTree should back to have 2 orders
+	ob, err = tomox.GetOrderBook(pair)
+	if ob == nil || err != nil {
+		t.Error("Can not get orderbook", pair, err, crypto.Keccak256([]byte(pair)))
+	}
+	if count := ob.Bids.PriceTree.size; count != 2 {
+		t.Error("Bid tree should have 2 orders")
+		t.Error("Actual: ", count)
+	}
+
+	// let's check cloneOrderBook to make sure order1 is still there
+	price = CloneBigInt(ether)
+	o := ob.Bids.GetOrder(GetKeyFromBig(big.NewInt(1)), price.Mul(price, big.NewInt(99)))
+	if o == nil {
+		t.Error("Order1 has been removed and cannot restore")
+	} else if quantity := o.Item.Quantity; quantity.Cmp(big.NewInt(100)) != 0 {
+		t.Error("Wrong quantity after restoring order")
+		t.Error("Expected: 100")
+		t.Error("Actual: ", quantity)
+	}
+
+	// TESTCASE2: no matchedOrder is generated, one more order is inserted to orderTree
+	// expected:
+	//	- put the orderItem back to pending list
+	// 	- restore orderTree state (remove the order which has just inserted to orderTree)
+
+	notMatchOrder := &OrderItem{}
+	// copy value from proccessedOrder from the testcase1
+	*notMatchOrder = *processedOrder
+	// modify orderId and price to make sure it won't match any order in orderTree
+	notMatchOrder.OrderID = uint64(6)
+	price = CloneBigInt(ether)
+	notMatchOrder.Price = price.Mul(price, big.NewInt(110)) // bidTree now has 1 order with price = 98, therefore, it won't match and be inserted to askTree
+
+	encodedOrderItem, err = EncodeBytesItem(notMatchOrder)
+	if err != nil {
+		t.Error(err)
+	}
+	processedData = []map[string][]byte{}
+	processedData = append(processedData, map[string][]byte{
+		"orderItem": encodedOrderItem,
+		"orderList": {},
+	})
+
+	if err := tomox.Backup(); err != nil {
+		t.Error(err)
+	}
+	if _, _, err := ob.ProcessOrder(notMatchOrder, false); err != nil {
+		t.Error("failed to process order", err)
+	}
+
+	// since this order is not matched any order, it will be inserted to AskTree
+	// AskTree now has 3 orders
+	ob, err = tomox.GetOrderBook(pair)
+	if ob == nil || err != nil {
+		t.Error("Can not get orderbook", pair, err)
+	}
+	if count := ob.Asks.PriceTree.size; count != 3 {
+		t.Error("Ask tree should have 3 orders")
+		t.Error("Actual: ", count)
+	}
+
+	// rollback this process
+	if err := tomox.Rollback(processedData); err != nil {
+		t.Error(err)
+	}
+	// after rolling back, askTree should back to have 2 orders
+	ob, err = tomox.GetOrderBook(pair)
+	if ob == nil || err != nil {
+		t.Error("Can not get orderbook", pair, err)
+	}
+	if count := ob.Asks.PriceTree.size; count != 2 {
+		t.Error("Ask tree should have 2 orders")
+		t.Error("Actual: ", count)
+	}
+
+	// notMatchedOrder whose orderId =6, price = 110 should be removed from orderAskTree
+	price = CloneBigInt(ether)
+	o = ob.Bids.GetOrder(GetKeyFromBig(big.NewInt(6)), price.Mul(price, big.NewInt(110)))
+	if o != nil {
+		t.Error("notMatchedOrder whose orderId =6, price = 110 should be removed from orderAskTree")
+	}
+
+	// TESTCASE3: a special case of testcase 2
+	// the processed order is the first order of a token pair
+	order7 := &OrderItem{}
+	// copy value from proccessedOrder from the testcase1
+	*order7 = *processedOrder
+	// modify orderId and price to make sure it won't match any order in orderTree
+	order7.OrderID = uint64(7)
+	newPair := "bbb/tomo"
+	order7.PairName = newPair
+
+	// this backup won't have orderbook of newPair
+	if err := tomox.Backup(); err != nil {
+		t.Error(err)
+	}
+	ob, err = tomox.GetOrderBook(newPair)
+	if ob == nil || err != nil {
+		t.Error("Can not get orderbook", newPair, err)
+	}
+	encodedOrderItem, err = EncodeBytesItem(order7)
+	if err != nil {
+		t.Error(err)
+	}
+	processedData = []map[string][]byte{}
+	processedData = append(processedData, map[string][]byte{
+		"orderItem": encodedOrderItem,
+		"orderList": {},
+	})
+	if _, _, err := ob.ProcessOrder(order7, false); err != nil {
+		t.Error("failed to process order", err)
+	}
+	// rollback this process
+	if err := tomox.Rollback(processedData); err != nil {
+		t.Error(err)
+	}
+	// after rolling back, orderbook of newPair does not exist
+	if tomox.hasOrderBook(newPair) {
+		t.Error("Expected: Orderbook does not exist")
 	}
 }

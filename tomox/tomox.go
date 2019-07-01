@@ -734,8 +734,8 @@ func (tomox *TomoX) verifyOrderNonce(order *OrderItem) error {
 func (tomox *TomoX) loadOrderCount() error {
 	var (
 		orderCount map[common.Address]*big.Int
-		err error
-		val interface{}
+		err        error
+		val        interface{}
 	)
 	val, err = tomox.db.Get([]byte(orderCountKey), &[]byte{})
 	if err != nil {
@@ -1025,6 +1025,25 @@ func (tomox *TomoX) addProcessedOrderHash(orderHash common.Hash, limit int) erro
 	return nil
 }
 
+func (tomox *TomoX) removeProcessedHash(orderHash common.Hash) error {
+	processedHashes := tomox.getPendingHashes()
+	if processedHashes == nil {
+		return nil
+	}
+	for i, v := range processedHashes {
+		if v == orderHash {
+			processedHashes = append(processedHashes[:i], processedHashes[i+1:]...)
+		}
+	}
+	// Store processedHashes .
+	if err := tomox.db.Put([]byte(processedHash), processedHashes); err != nil {
+		log.Error("Fail to rollback processed hash", "err", err)
+		return err
+	}
+
+	return nil
+}
+
 func (tomox *TomoX) existProcessedOrderHash(orderHash common.Hash) bool {
 	processedHashes := tomox.getProcessedOrderHash()
 
@@ -1093,8 +1112,8 @@ func (tomox *TomoX) updatePairs(pairs map[string]bool) error {
 func (tomox *TomoX) loadPairs() (map[string]bool, error) {
 	var (
 		pairs map[string]bool
-		val interface{}
-		err error
+		val   interface{}
+		err   error
 	)
 	val, err = tomox.db.Get([]byte(activePairsKey), &[]byte{})
 	if err != nil {
@@ -1160,9 +1179,9 @@ func (tomox *TomoX) loadSnapshot(hash common.Hash) error {
 	// load orderbook from snapshot
 	var (
 		snap *Snapshot
-		val interface{}
-		ob *OrderBook
-		err error
+		val  interface{}
+		ob   *OrderBook
+		err  error
 	)
 	if hash == (common.Hash{}) {
 		if val, err = tomox.db.Get([]byte(latestSnapshotKey), val); err != nil {
@@ -1178,7 +1197,160 @@ func (tomox *TomoX) loadSnapshot(hash common.Hash) error {
 	for pair := range snap.OrderBooks {
 		ob, err = snap.RestoreOrderBookFromSnapshot(tomox.db, pair)
 		if err == nil {
-			tomox.Orderbooks[pair] = ob
+			if err := ob.Save(); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// this is used for backup tomoX state before we run matching engine
+// backup orderbooks only since other things won't change when matching engine processOrders
+// for backup: add prefix "backup" to orderbook Key to keep it as a separated data
+func (tomox *TomoX) Backup() error {
+	activePairs := tomox.listTokenPairs()
+	if len(activePairs) == 0 {
+		return nil
+	}
+
+	// save backup orderbooks with prefix "backup_"
+	for _, pairName := range activePairs {
+		ob, err := tomox.getAndCreateIfNotExisted(pairName)
+		if err != nil {
+			return err
+		}
+		obClone, err := ob.Clone(TomoXCloneModeBackup)
+		if err != nil {
+			return err
+		}
+		if err := obClone.Save(); err != nil {
+			return err
+		}
+	}
+	return nil
+
+}
+
+// restore orderbook, ordertree to the backup one
+// unmark orderPending, orderProcessed
+func (tomox *TomoX) Rollback(processedData []map[string][]byte) error {
+	start := time.Now()
+	defer func() {
+		log.Debug("Rollback tomox data takes ", "time", common.PrettyDuration(time.Since(start)))
+	}()
+
+	for _, data := range processedData {
+		// database rollback: restore orderlist, order data
+		order := &OrderItem{}
+		ol := &OrderList{}
+
+		if err := DecodeBytesItem(data["orderItem"], order); err != nil {
+			return err
+		}
+
+		// remove hash from processed hashes
+		if err := tomox.removeProcessedHash(order.Hash); err != nil {
+			return err
+		}
+		// put hash back to pending hashes
+		if err := tomox.addPendingHash(order.Hash); err != nil {
+			return err
+		}
+		// put order pending back to pending list
+		if err := tomox.addOrderPending(order); err != nil {
+			return err
+		}
+
+		ob, err := tomox.GetOrderBook(order.PairName)
+		if err != nil {
+			return err
+		}
+
+		if len(data["orderList"]) > 0 {
+			// Rollback case 1: matching engine generates trades and remove some orders from orderTree
+			// to rollback, we restore orderList
+			if err := DecodeBytesItem(data["orderList"], ol); err != nil {
+				return err
+			}
+
+			var orderTree *OrderTree
+			if order.Side == Bid {
+				orderTree = ob.Asks
+			} else {
+				orderTree = ob.Bids
+			}
+			if err := orderTree.SaveOrderList(ol); err != nil {
+				return err
+			}
+			if err := ob.Save(); err != nil {
+				return err
+			}
+		} else {
+			// Rollback case 2: matching engine does not generate any new trade, new order is inserted to orderTree
+			// the only thing need to do is: remove new order from orderTree
+
+			if order.Side == Bid {
+				ol = ob.Bids.PriceList(order.Price)
+				if err := ob.Bids.RemoveOrder(NewOrder(order, ol.GetCommonKey())); err != nil {
+					return err
+				}
+			} else {
+				ol = ob.Asks.PriceList(order.Price)
+				if err := ob.Asks.RemoveOrder(NewOrder(order, ol.GetCommonKey())); err != nil {
+					return err
+				}
+			}
+		}
+
+		// rollback tomox memory state
+
+		// if this is the first order of a token pair, there is no orderbook backup for the pair
+		// removing current orderbook, that's all
+		if ob.Bids.Item.Volume.Cmp(Zero()) == 0 && ob.Asks.Item.Volume.Cmp(Zero()) == 0 {
+			if err := tomox.db.Delete(ob.Key, false); err != nil {
+				log.Error("failed to remove empty orderBook", "err", err)
+			}
+			// remove backup order tree
+			if err := tomox.db.Delete(ob.Bids.GetCommonKey(), false); err != nil {
+				log.Error("failed to remove empty orderTree", "err", err)
+			}
+
+			if err := tomox.db.Delete(ob.Asks.GetCommonKey(), false); err != nil {
+				log.Error("failed to remove empty orderTree", "err", err)
+			}
+			continue
+		}
+
+		// copy backup orderbook to the current one and remove backup
+		obBackup := NewOrderBook(order.PairName, tomox.db)
+		// update with backup key
+		obBackup.Key = append([]byte(backupPrefix), obBackup.Key...)
+		obBackup.Bids.Key = append([]byte(backupPrefix), obBackup.Bids.Key...)
+		obBackup.Asks.Key = append([]byte(backupPrefix), obBackup.Asks.Key...)
+
+		if err := obBackup.Restore(); err != nil {
+			return err
+		}
+		obRollback, err := obBackup.Clone(TomoXCloneModeRollback)
+		if err != nil {
+			return err
+		}
+		if err := obRollback.Save(); err != nil {
+			return err
+		}
+		// remove backup orderbook
+		if err := tomox.db.Delete(obBackup.Key, false); err != nil {
+			log.Error("failed to remove backup orderBook", "err", err)
+		}
+
+		// remove backup order tree
+		if err := tomox.db.Delete(obBackup.Bids.GetCommonKey(), false); err != nil {
+			log.Error("failed to remove backup orderTree", "err", err)
+		}
+
+		if err := tomox.db.Delete(obBackup.Asks.GetCommonKey(), false); err != nil {
+			log.Error("failed to remove backup orderTree", "err", err)
 		}
 	}
 	return nil

@@ -292,7 +292,11 @@ func (tx *Transaction) IsMatchingTransaction() bool {
 		return false
 	}
 
-	if tx.To().String() != common.TomoXAddr {
+	if tx.To().String() != common.HexToAddress(common.TomoXAddr).String() {
+		return false
+	}
+
+	if len(tx.Data()) == 0 {
 		return false
 	}
 

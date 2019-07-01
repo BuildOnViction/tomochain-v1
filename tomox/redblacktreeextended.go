@@ -89,3 +89,9 @@ func (tree *RedBlackTreeExtended) getMaxFromNode(node *Node) (foundNode *Node, f
 	}
 	return tree.getMaxFromNode(nodeRight)
 }
+
+func (tree *RedBlackTreeExtended) ClonePriceTree() *RedBlackTreeExtended {
+	return &RedBlackTreeExtended{
+		tree.Clone(),
+	}
+}

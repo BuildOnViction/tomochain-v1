@@ -454,3 +454,34 @@ func (orderTree *OrderTree) Hash() (common.Hash, error) {
 func (orderTree *OrderTree) GetCommonKey() []byte {
 	return append([]byte("OT"), orderTree.Key...)
 }
+
+func (orderTree *OrderTree) Clone(cloneOrderBook *OrderBook, mode string) (*OrderTree, error) {
+	key := orderTree.Key
+	if mode == TomoXCloneModeBackup {
+		key = append([]byte(backupPrefix), key...)
+	} else if mode == TomoXCloneModeRollback {
+		// remove backup prefix
+		key = key[len([]byte(backupPrefix)):]
+	}
+	clone := &OrderTree{
+		PriceTree: orderTree.PriceTree.ClonePriceTree(),
+		orderBook: cloneOrderBook,
+		orderDB:   orderTree.orderDB,
+		slot:      CloneBigInt(orderTree.slot),
+		Key:       key,
+		Item:      orderTree.Item.Clone(),
+	}
+	if err := clone.Save(); err != nil {
+		return nil, err
+	}
+	return clone, nil
+}
+
+func (item *OrderTreeItem) Clone() *OrderTreeItem {
+	return &OrderTreeItem{
+		Volume:        CloneBigInt(item.Volume),
+		NumOrders:     item.NumOrders,
+		PriceTreeKey:  item.PriceTreeKey,
+		PriceTreeSize: item.PriceTreeSize,
+	}
+}

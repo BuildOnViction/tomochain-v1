@@ -155,6 +155,7 @@ func TestTomoX_Snapshot(t *testing.T) {
 
 	tomox := &TomoX{
 		Orderbooks: map[string]*OrderBook{},
+		activePairs: map[string]bool{},
 		db: NewLDBEngine(&Config{
 			DataDir:  testDir,
 			DBEngine: "leveldb",
@@ -173,7 +174,10 @@ func TestTomoX_Snapshot(t *testing.T) {
 	if err != nil {
 		t.Error("Failed to create orderbook", err)
 	}
-	tomox.Orderbooks[pair] = ob
+	tomox.activePairs[pair] = true
+	if err := ob.Save(); err != nil {
+		t.Error(err)
+	}
 
 	if err := tomox.Snapshot(blockHash); err != nil {
 		t.Error("Failed to store snapshot", "err", err, "blockHash", blockHash)
