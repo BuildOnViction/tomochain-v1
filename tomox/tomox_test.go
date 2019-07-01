@@ -246,8 +246,8 @@ func TestEncodeDecodeTXMatch(t *testing.T) {
 	}
 	txMatches = make(map[common.Hash]TxDataMatch)
 	txMatches[order.Hash] = TxDataMatch{
-		order:  value,
-		trades: trades,
+		Order:  value,
+		Trades: trades,
 	}
 	encode, err := json.Marshal(txMatches)
 	if err != nil {

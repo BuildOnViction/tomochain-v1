@@ -214,7 +214,7 @@ func TestOrderItem_VerifyMatchedOrder(t *testing.T) {
 
 func TestTxDataMatch_DecodeOrder(t *testing.T) {
 	txDataMatch := &TxDataMatch{
-		order: []byte("abc"),
+		Order: []byte("abc"),
 	}
 	var err error
 	if _, err = txDataMatch.DecodeOrder(); err == nil {
@@ -235,7 +235,7 @@ func TestTxDataMatch_DecodeOrder(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	txDataMatch.order = b
+	txDataMatch.Order = b
 	if _, err = txDataMatch.DecodeOrder(); err != nil {
 		t.Error(err)
 	}

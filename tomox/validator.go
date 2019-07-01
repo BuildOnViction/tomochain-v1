@@ -206,19 +206,19 @@ func GetTokenBalance(statedb *state.StateDB, address common.Address, contractAdd
 // verify orderbook, orderTrees before running matching engine
 func (tx *TxDataMatch) VerifyOldTomoXState(ob *OrderBook) error {
 	// verify orderbook
-	if hash, err := ob.Hash(); err != nil || hash != tx.obOld {
+	if hash, err := ob.Hash(); err != nil || hash != tx.ObOld {
 		return errOrderBookHashNotMatch
 	}
 
 	// verify order trees
 	// bidTree tree
 	bidTree := ob.Bids
-	if hash, err := bidTree.Hash(); err != nil || hash != tx.bidOld {
+	if hash, err := bidTree.Hash(); err != nil || hash != tx.BidOld {
 		return errOrderTreeHashNotMatch
 	}
 	// askTree tree
 	askTree := ob.Asks
-	if hash, err := askTree.Hash(); err != nil || hash != tx.askOld {
+	if hash, err := askTree.Hash(); err != nil || hash != tx.AskOld {
 		return errOrderTreeHashNotMatch
 	}
 	return nil
@@ -227,19 +227,19 @@ func (tx *TxDataMatch) VerifyOldTomoXState(ob *OrderBook) error {
 // verify orderbook, orderTrees after running matching engine
 func (tx *TxDataMatch) VerifyNewTomoXState(ob *OrderBook) error {
 	// verify orderbook
-	if hash, err := ob.Hash(); err != nil || hash != tx.obNew {
+	if hash, err := ob.Hash(); err != nil || hash != tx.ObNew {
 		return errOrderBookHashNotMatch
 	}
 
 	// verify order trees
 	// bidTree tree
 	bidTree := ob.Bids
-	if hash, err := bidTree.Hash(); err != nil || hash != tx.bidNew {
+	if hash, err := bidTree.Hash(); err != nil || hash != tx.BidNew {
 		return errOrderTreeHashNotMatch
 	}
 	// askTree tree
 	askTree := ob.Asks
-	if hash, err := askTree.Hash(); err != nil || hash != tx.askNew {
+	if hash, err := askTree.Hash(); err != nil || hash != tx.AskNew {
 		return errOrderTreeHashNotMatch
 	}
 	return nil
@@ -247,7 +247,7 @@ func (tx *TxDataMatch) VerifyNewTomoXState(ob *OrderBook) error {
 
 func (tx *TxDataMatch) DecodeOrder() (*OrderItem, error) {
 	order := &OrderItem{}
-	if err := DecodeBytesItem(tx.order, order); err != nil {
+	if err := DecodeBytesItem(tx.Order, order); err != nil {
 		return order, err
 	}
 	return order, nil
