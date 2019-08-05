@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/tomox"
 	"math/big"
 	"os"
@@ -27,7 +28,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc"
@@ -597,48 +597,7 @@ func (self *worker) commitNewWork() {
 		specialTxs types.Transactions
 	)
 	if self.config.Posv != nil && header.Number.Uint64()%self.config.Posv.Epoch != 0 {
-		tomoX := self.eth.GetTomoX()
-		if tomoX != nil && header.Number.Uint64() > self.config.Posv.Epoch {
-			manager := self.eth.AccountManager()
-			if manager != nil {
-				// Find active account.
-				account := accounts.Account{}
-				var wallet accounts.Wallet
-				if wallets := manager.Wallets(); len(wallets) > 0 {
-					wallet = wallets[0]
-					if accts := wallets[0].Accounts(); len(accts) > 0 {
-						account = accts[0]
-					}
-				}
-
-				log.Debug("Start processing order pending")
-				txMatches := tomoX.ProcessOrderPending()
-				if len(txMatches) > 0 {
-					log.Debug("transaction matches found", "txMatches", len(txMatches))
-					// put all TxMatchesData into only one tx
-					txMatchBytes, err := tomox.EncodeTxMatchesBatch(txMatches)
-					if err != nil {
-						log.Error("Fail to marshal txMatch", "error", err)
-					} else {
-						// Create and send tx to smart contract for sign validate block.
-						nonce := self.eth.TxPool().State().GetNonce(account.Address)
-						tx := types.NewTransaction(nonce, common.HexToAddress(common.TomoXAddr), big.NewInt(0), txMatchGasLimit, big.NewInt(0), txMatchBytes)
-						txM, err := wallet.SignTx(account, tx, self.config.ChainId)
-						if err != nil {
-							log.Error("Fail to create tx matches", "error", err)
-						} else {
-							// Add tx signed to local tx pool.
-							err = self.eth.TxPool().AddLocal(txM)
-							if err != nil {
-								log.Error("Fail to add tx matches to local pool.", "error", err)
-							}
-						}
-					}
-
-				}
-			}
-		}
-
+		self.collectTxMatches(header)
 		pending, err := self.eth.TxPool().Pending()
 		if err != nil {
 			log.Error("Failed to fetch pending transactions", "err", err)
@@ -863,4 +822,60 @@ func (env *Work) commitTransaction(tx *types.Transaction, bc *core.BlockChain, c
 	env.receipts = append(env.receipts, receipt)
 
 	return nil, receipt.Logs
+}
+
+func (self *worker) collectTxMatches(header *types.Header) {
+	tomoX := self.eth.GetTomoX()
+	if tomoX == nil || header.Number.Uint64() <= self.config.Posv.Epoch {
+		return
+	}
+
+	for {
+		select {
+		case <-self.chain.InsertBlockDone:
+			{
+				manager := self.eth.AccountManager()
+				if manager != nil {
+					// Find active account.
+					account := accounts.Account{}
+					var wallet accounts.Wallet
+					if wallets := manager.Wallets(); len(wallets) > 0 {
+						wallet = wallets[0]
+						if accts := wallets[0].Accounts(); len(accts) > 0 {
+							account = accts[0]
+						}
+					}
+
+					log.Debug("Start processing order pending")
+					txMatches := tomoX.ProcessOrderPending()
+					if len(txMatches) > 0 {
+						log.Debug("transaction matches found", "txMatches", len(txMatches))
+						// put all TxMatchesData into only one tx
+						txMatchBytes, err := tomox.EncodeTxMatchesBatch(txMatches)
+						if err != nil {
+							log.Error("Fail to marshal txMatch", "error", err)
+						} else {
+							// Create and send tx to smart contract for sign validate block.
+							nonce := self.eth.TxPool().State().GetNonce(account.Address)
+							tx := types.NewTransaction(nonce, common.HexToAddress(common.TomoXAddr), big.NewInt(0), txMatchGasLimit, big.NewInt(0), txMatchBytes)
+							txM, err := wallet.SignTx(account, tx, self.config.ChainId)
+							if err != nil {
+								log.Error("Fail to create tx matches", "error", err)
+							} else {
+								// Add tx signed to local tx pool.
+								err = self.eth.TxPool().AddLocal(txM)
+								if err != nil {
+									log.Error("Fail to add tx matches to local pool.", "error", err)
+								}
+							}
+						}
+
+					}
+				}
+				return
+			}
+		default:
+			log.Debug("Waiting InsertBlockDone....", "waitingBlock", header.Number.Uint64()-1)
+		}
+	}
 }

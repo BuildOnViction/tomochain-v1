@@ -143,9 +143,10 @@ type BlockChain struct {
 	validator Validator // block and state validator interface
 	vmConfig  vm.Config
 
-	badBlocks   *lru.Cache // Bad block cache
-	IPCEndpoint string
-	Client      *ethclient.Client // Global ipc client instance.
+	badBlocks       *lru.Cache // Bad block cache
+	IPCEndpoint     string
+	Client          *ethclient.Client // Global ipc client instance.
+	InsertBlockDone chan bool
 }
 
 // NewBlockChain returns a fully initialised block chain using information
@@ -185,6 +186,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		engine:               engine,
 		vmConfig:             vmConfig,
 		badBlocks:            badBlocks,
+		InsertBlockDone:      make(chan bool, 1),
 	}
 	bc.SetValidator(NewBlockValidator(chainConfig, bc, engine))
 	bc.SetProcessor(NewStateProcessor(chainConfig, bc, engine))
@@ -1069,6 +1071,19 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 	bc.chainmu.Lock()
 	defer bc.chainmu.Unlock()
 
+	lastBlock := &types.Block{}
+	defer func() {
+		if lastBlock.NumberU64() >= bc.Config().Posv.Epoch {
+			log.Debug("InsertBlockDone", "number", lastBlock.NumberU64())
+			select {
+			case bc.InsertBlockDone <- true: // put into the channel unless it is full
+			default:
+				// Channel full. Pop it first
+				<-bc.InsertBlockDone
+				bc.InsertBlockDone <- true
+			}
+		}
+	}()
 	// A queued approach to delivering events. This is generally
 	// faster than direct delivery and requires much less mutex
 	// acquiring.
@@ -1083,6 +1098,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 	seals := make([]bool, len(chain))
 
 	for i, block := range chain {
+		lastBlock = block
 		headers[i] = block.Header()
 		seals[i] = false
 		bc.downloadingBlock.Add(block.Hash(), true)
@@ -1406,6 +1422,18 @@ func (bc *BlockChain) insertBlock(block *types.Block) ([]interface{}, []*types.L
 		events        = make([]interface{}, 0, 1)
 		coalescedLogs []*types.Log
 	)
+	defer func() {
+		if block.NumberU64() >= bc.Config().Posv.Epoch {
+			log.Debug("InsertBlockDone", "number", block.NumberU64())
+			select {
+			case bc.InsertBlockDone <- true: // put into the channel unless it is full
+			default:
+				// Channel full. Pop it first
+				<-bc.InsertBlockDone
+				bc.InsertBlockDone <- true
+			}
+		}
+	}()
 	if _, check := bc.downloadingBlock.Get(block.Hash()); check {
 		log.Debug("Stop fetcher a block because downloading", "number", block.NumberU64(), "hash", block.Hash())
 		return events, coalescedLogs, nil
