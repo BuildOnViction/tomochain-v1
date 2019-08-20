@@ -1274,10 +1274,11 @@ func (tomox *TomoX) SyncDataToSDKNode(txDataMatch TxDataMatch, txHash common.Has
 
 		// 2.a. put to trades
 		tradeSDK := &sdktypes.Trade{}
+		quantity := new(big.Int)
 		if q, ok := trade["quantity"]; ok {
-			tradeSDK.Amount = new(big.Int)
-			tradeSDK.Amount.SetString(q, 10)
+			quantity.SetString(q, 10)
 		}
+		tradeSDK.Amount = quantity
 		tradeSDK.PricePoint = order.Price
 		tradeSDK.PairName = order.PairName
 		tradeSDK.BaseToken = order.BaseToken
@@ -1288,6 +1289,21 @@ func (tomox *TomoX) SyncDataToSDKNode(txDataMatch TxDataMatch, txHash common.Has
 		tradeSDK.TakerOrderHash = order.Hash
 		tradeSDK.MakerOrderHash = common.HexToHash(trade["makerOrderHash"])
 		tradeSDK.TxHash = txHash
+
+		// feeAmount: all fees are calculated in quoteToken
+		quoteTokenQuantity := big.NewInt(0).Mul(quantity, order.Price)
+		quoteTokenQuantity = big.NewInt(0).Div(quoteTokenQuantity, common.BasePrice)
+		takerFee := big.NewInt(0).Mul(quoteTokenQuantity, order.TakeFee)
+		takerFee = big.NewInt(0).Div(takerFee, common.TomoXBaseFee)
+		tradeSDK.TakerFee = takerFee
+		makerFeeRate, ok := new(big.Int).SetString(trade["makerFeeRate"], 10)
+		if !ok {
+			return fmt.Errorf("failed to parse makerFeeRate %v", trade["makerFeeRate"])
+		}
+		makerFee := big.NewInt(0).Mul(quoteTokenQuantity, makerFeeRate)
+		makerFee = big.NewInt(0).Div(makerFee, common.TomoXBaseFee)
+		tradeSDK.MakerFee = makerFee
+
 		tradeSDK.Hash = tradeSDK.ComputeHash()
 		log.Debug("TRADE history", "order", order, "trade", tradeSDK)
 		if err := db.Put(EmptyKey(), tradeSDK, false); err != nil {

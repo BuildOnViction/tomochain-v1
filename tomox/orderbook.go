@@ -431,6 +431,7 @@ func (orderBook *OrderBook) processOrderList(side string, orderList *OrderList, 
 		transactionRecord["uAddr"] = headOrder.Item.UserAddress.String()
 		transactionRecord["bToken"] = headOrder.Item.BaseToken.String()
 		transactionRecord["qToken"] = headOrder.Item.QuoteToken.String()
+		transactionRecord["makerFeeRate"] = headOrder.Item.MakeFee.String()
 
 		trades = append(trades, transactionRecord)
 	}
