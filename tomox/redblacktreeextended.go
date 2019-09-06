@@ -27,7 +27,7 @@ func NewRedBlackTreeExtended(obdb OrderDao) *RedBlackTreeExtended {
 }
 
 // GetMin gets the min value and flag if found
-func (tree *RedBlackTreeExtended) GetMin(dryrun bool) (value []byte, found bool) {
+func (tree *RedBlackTreeExtended) GetMin(dryrun uint64) (value []byte, found bool) {
 	node, found := tree.getMinFromNode(tree.Root(dryrun), dryrun)
 	if node != nil {
 		return node.Value(), found
@@ -36,7 +36,7 @@ func (tree *RedBlackTreeExtended) GetMin(dryrun bool) (value []byte, found bool)
 }
 
 // GetMax gets the max value and flag if found
-func (tree *RedBlackTreeExtended) GetMax(dryrun bool) (value []byte, found bool) {
+func (tree *RedBlackTreeExtended) GetMax(dryrun uint64) (value []byte, found bool) {
 	node, found := tree.getMaxFromNode(tree.Root(dryrun), dryrun)
 	if node != nil {
 		return node.Value(), found
@@ -45,11 +45,11 @@ func (tree *RedBlackTreeExtended) GetMax(dryrun bool) (value []byte, found bool)
 }
 
 // RemoveMin removes the min value and flag if found
-func (tree *RedBlackTreeExtended) RemoveMin(dryrun bool) (value []byte, deleted bool) {
+func (tree *RedBlackTreeExtended) RemoveMin(dryrun uint64) (value []byte, deleted bool) {
 	node, found := tree.getMinFromNode(tree.Root(dryrun), dryrun)
 	// fmt.Println("found min", node)
 	if found {
-		tree.Remove(node.Key, false)
+		tree.Remove(node.Key, NonDryrunMode)
 		// fmt.Printf("%x\n", node.Key)
 		return node.Value(), found
 	}
@@ -57,18 +57,18 @@ func (tree *RedBlackTreeExtended) RemoveMin(dryrun bool) (value []byte, deleted 
 }
 
 // RemoveMax removes the max value and flag if found
-func (tree *RedBlackTreeExtended) RemoveMax(dryrun bool) (value []byte, deleted bool) {
+func (tree *RedBlackTreeExtended) RemoveMax(dryrun uint64) (value []byte, deleted bool) {
 	// fmt.Println("found max with root", tree.Root())
 	node, found := tree.getMaxFromNode(tree.Root(dryrun), dryrun)
 	// fmt.Println("found max", node)
 	if found {
-		tree.Remove(node.Key, false)
+		tree.Remove(node.Key, NonDryrunMode)
 		return node.Value(), found
 	}
 	return nil, false
 }
 
-func (tree *RedBlackTreeExtended) getMinFromNode(node *Node, dryrun bool) (foundNode *Node, found bool) {
+func (tree *RedBlackTreeExtended) getMinFromNode(node *Node, dryrun uint64) (foundNode *Node, found bool) {
 	if node == nil {
 		return nil, false
 	}
@@ -79,7 +79,7 @@ func (tree *RedBlackTreeExtended) getMinFromNode(node *Node, dryrun bool) (found
 	return tree.getMinFromNode(nodeLeft, dryrun)
 }
 
-func (tree *RedBlackTreeExtended) getMaxFromNode(node *Node, dryrun bool) (foundNode *Node, found bool) {
+func (tree *RedBlackTreeExtended) getMaxFromNode(node *Node, dryrun uint64) (foundNode *Node, found bool) {
 	if node == nil {
 		return nil, false
 	}

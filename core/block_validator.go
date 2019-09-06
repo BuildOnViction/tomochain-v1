@@ -89,7 +89,7 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 
 	// clear the previous dry-run cache
 	if tomoXService != nil {
-		tomoXService.GetDB().InitDryRunMode()
+		tomoXService.GetDB().InitDryRunVerifyMode()
 	}
 	txMatchBatchData, err := ExtractMatchingTransactions(block.Transactions())
 	if err != nil {
@@ -178,7 +178,7 @@ func (v *BlockValidator) validateMatchingOrder(tomoXService *tomox.TomoX, curren
 			return []common.Hash{}, err
 		}
 
-		ob, err := tomoXService.GetOrderBook(order.PairName, true)
+		ob, err := tomoXService.GetOrderBook(order.PairName, tomox.DryrunVerifyMode)
 		// if orderbook of this pairName has been updated by previous tx in this block, use it
 
 		if err != nil {
@@ -191,7 +191,7 @@ func (v *BlockValidator) validateMatchingOrder(tomoXService *tomox.TomoX, curren
 		}
 
 		// process Matching Engine
-		if _, _, err := ob.ProcessOrder(order, true, true); err != nil {
+		if _, _, err := ob.ProcessOrder(order, true, tomox.DryrunVerifyMode); err != nil {
 			return []common.Hash{}, err
 		}
 

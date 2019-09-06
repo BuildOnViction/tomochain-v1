@@ -67,7 +67,7 @@ func (node *Node) String(tree *Tree) string {
 	return fmt.Sprintf("%v -> %x, (%v)\n", tree.FormatBytes(node.Key), node.Value(), node.Item.Keys.String(tree))
 }
 
-func (node *Node) maximumNode(tree *Tree, dryrun bool) *Node {
+func (node *Node) maximumNode(tree *Tree, dryrun uint64) *Node {
 	newNode := node
 	if newNode == nil {
 		return newNode
@@ -117,7 +117,7 @@ func (node *Node) ParentKey(keys ...[]byte) []byte {
 	return node.Item.Keys.Parent
 }
 
-func (node *Node) Left(tree *Tree, dryrun bool) *Node {
+func (node *Node) Left(tree *Tree, dryrun uint64) *Node {
 	key := node.LeftKey()
 
 	newNode, err := tree.GetNode(key, dryrun)
@@ -128,7 +128,7 @@ func (node *Node) Left(tree *Tree, dryrun bool) *Node {
 	return newNode
 }
 
-func (node *Node) Right(tree *Tree, dryrun bool) *Node {
+func (node *Node) Right(tree *Tree, dryrun uint64) *Node {
 	key := node.RightKey()
 	newNode, err := tree.GetNode(key,dryrun)
 	if err != nil {
@@ -137,7 +137,7 @@ func (node *Node) Right(tree *Tree, dryrun bool) *Node {
 	return newNode
 }
 
-func (node *Node) Parent(tree *Tree, dryrun bool) *Node {
+func (node *Node) Parent(tree *Tree, dryrun uint64) *Node {
 	key := node.ParentKey()
 	newNode, err := tree.GetNode(key, dryrun)
 	if err != nil {
@@ -150,14 +150,14 @@ func (node *Node) Value() []byte {
 	return node.Item.Value
 }
 
-func (node *Node) grandparent(tree *Tree, dryrun bool) *Node {
+func (node *Node) grandparent(tree *Tree, dryrun uint64) *Node {
 	if node != nil && !tree.IsEmptyKey(node.ParentKey()) {
 		return node.Parent(tree, dryrun).Parent(tree, dryrun)
 	}
 	return nil
 }
 
-func (node *Node) uncle(tree *Tree, dryrun bool) *Node {
+func (node *Node) uncle(tree *Tree, dryrun uint64) *Node {
 	if node == nil || tree.IsEmptyKey(node.ParentKey()) {
 		return nil
 	}
@@ -169,7 +169,7 @@ func (node *Node) uncle(tree *Tree, dryrun bool) *Node {
 	return parent.sibling(tree, dryrun)
 }
 
-func (node *Node) sibling(tree *Tree, dryrun bool) *Node {
+func (node *Node) sibling(tree *Tree, dryrun uint64) *Node {
 	if node == nil || tree.IsEmptyKey(node.ParentKey()) {
 		return nil
 	}

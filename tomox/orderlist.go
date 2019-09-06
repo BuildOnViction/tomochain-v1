@@ -77,7 +77,7 @@ func NewOrderListWithItem(item *OrderListItem, orderTree *OrderTree) *OrderList 
 	return orderList
 }
 
-func (orderList *OrderList) GetOrder(key []byte, dryrun bool) *Order {
+func (orderList *OrderList) GetOrder(key []byte, dryrun uint64) *Order {
 	storedKey := orderList.GetOrderIDFromKey(key)
 	log.Debug("Get order from key", "storedKey", hex.EncodeToString(storedKey))
 	return orderList.orderTree.orderBook.GetOrder(storedKey, key, dryrun)
@@ -87,16 +87,16 @@ func (orderList *OrderList) isEmptyKey(key []byte) bool {
 	return orderList.orderTree.PriceTree.IsEmptyKey(key)
 }
 
-func (orderList *OrderList) Head(dryrun bool) *Order {
+func (orderList *OrderList) Head(dryrun uint64) *Order {
 	return orderList.GetOrder(orderList.Item.HeadOrder, dryrun)
 }
 
-func (orderList *OrderList) Tail(dryrun bool) *Order {
+func (orderList *OrderList) Tail(dryrun uint64) *Order {
 	return orderList.GetOrder(orderList.Item.TailOrder, dryrun)
 }
 
 // String : travel the list to print it in nice format
-func (orderList *OrderList) String(startDepth int, dryrun bool) string {
+func (orderList *OrderList) String(startDepth int, dryrun uint64) string {
 
 	if orderList == nil {
 		return "<nil>"
@@ -157,7 +157,7 @@ func (orderList *OrderList) Less(than *OrderList) bool {
 	return IsStrictlySmallerThan(orderList.Item.Price, than.Item.Price)
 }
 
-func (orderList *OrderList) Save(dryrun bool) error {
+func (orderList *OrderList) Save(dryrun uint64) error {
 	return orderList.orderTree.SaveOrderList(orderList, dryrun)
 }
 
@@ -182,13 +182,13 @@ func (orderList *OrderList) GetOrderID(order *Order) []byte {
 }
 
 // OrderExist search order in orderlist
-func (orderList *OrderList) OrderExist(key []byte, dryrun bool) bool {
+func (orderList *OrderList) OrderExist(key []byte, dryrun uint64) bool {
 	orderKey := orderList.GetOrderIDFromKey(key)
 	found, _ := orderList.orderTree.orderDB.Has(orderKey, dryrun)
 	return found
 }
 
-func (orderList *OrderList) SaveOrder(order *Order, dryrun bool) error {
+func (orderList *OrderList) SaveOrder(order *Order, dryrun uint64) error {
 	key := orderList.GetOrderID(order)
 	log.Debug("Save order ", "key", hex.EncodeToString(key), "value", ToJSON(order.Item))
 
@@ -196,7 +196,7 @@ func (orderList *OrderList) SaveOrder(order *Order, dryrun bool) error {
 }
 
 // AppendOrder : append order into the order list
-func (orderList *OrderList) AppendOrder(order *Order, dryrun bool) error {
+func (orderList *OrderList) AppendOrder(order *Order, dryrun uint64) error {
 
 	if orderList.Item.Length == uint64(0) {
 		order.Item.NextOrder = EmptyKey()
@@ -229,13 +229,13 @@ func (orderList *OrderList) AppendOrder(order *Order, dryrun bool) error {
 	return nil
 }
 
-func (orderList *OrderList) DeleteOrder(order *Order, dryrun bool) error {
+func (orderList *OrderList) DeleteOrder(order *Order, dryrun uint64) error {
 	key := orderList.GetOrderID(order)
 	return orderList.orderTree.orderDB.Delete(key, dryrun)
 }
 
 // RemoveOrder : remove order from the order list
-func (orderList *OrderList) RemoveOrder(order *Order, dryrun bool) error {
+func (orderList *OrderList) RemoveOrder(order *Order, dryrun uint64) error {
 
 	if orderList.Item.Length == uint64(0) {
 		// empty mean nothing to delete
@@ -289,7 +289,7 @@ func (orderList *OrderList) RemoveOrder(order *Order, dryrun bool) error {
 }
 
 // MoveToTail : move order to the end of the order list
-func (orderList *OrderList) MoveToTail(order *Order, dryrun bool) error {
+func (orderList *OrderList) MoveToTail(order *Order, dryrun uint64) error {
 	if !orderList.isEmptyKey(order.Item.PrevOrder) { // This Order is not the first Order in the OrderList
 		prevOrder := orderList.GetOrder(order.Item.PrevOrder, dryrun)
 		if prevOrder != nil {

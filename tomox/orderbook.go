@@ -116,7 +116,7 @@ func NewOrderBook(name string, db OrderDao) *OrderBook {
 	return orderBook
 }
 
-func (orderBook *OrderBook) Save(dryrun bool) error {
+func (orderBook *OrderBook) Save(dryrun uint64) error {
 
 	log.Debug("save orderbook asks")
 	if err := orderBook.Asks.Save(dryrun); err != nil {
@@ -135,7 +135,7 @@ func (orderBook *OrderBook) Save(dryrun bool) error {
 	return orderBook.db.Put(orderBookItemKey, orderBook.Item, dryrun)
 }
 
-func (orderBook *OrderBook) Restore(dryrun bool) error {
+func (orderBook *OrderBook) Restore(dryrun uint64) error {
 	if err := orderBook.Asks.Restore(dryrun); err != nil {
 		log.Error("can't restore orderbook asks", "err", err)
 		return err
@@ -178,7 +178,7 @@ func (orderBook *OrderBook) GetOrderIDFromKey(key []byte) []byte {
 	return common.BigToHash(Add(orderBook.Slot, orderSlot)).Bytes()
 }
 
-func (orderBook *OrderBook) GetOrder(storedKey, key []byte, dryrun bool) *Order {
+func (orderBook *OrderBook) GetOrder(storedKey, key []byte, dryrun uint64) *Order {
 	if orderBook.db.IsEmptyKey(key) || orderBook.db.IsEmptyKey(storedKey) {
 		return nil
 	}
@@ -203,27 +203,27 @@ func (orderBook *OrderBook) UpdateTime() {
 }
 
 // BestBid : get the best bid of the order book
-func (orderBook *OrderBook) BestBid(dryrun bool) (value *big.Int) {
+func (orderBook *OrderBook) BestBid(dryrun uint64) (value *big.Int) {
 	return orderBook.Bids.MaxPrice(dryrun)
 }
 
 // BestAsk : get the best ask of the order book
-func (orderBook *OrderBook) BestAsk(dryrun bool) (value *big.Int) {
+func (orderBook *OrderBook) BestAsk(dryrun uint64) (value *big.Int) {
 	return orderBook.Asks.MinPrice(dryrun)
 }
 
 // WorstBid : get the worst bid of the order book
-func (orderBook *OrderBook) WorstBid(dryrun bool) (value *big.Int) {
+func (orderBook *OrderBook) WorstBid(dryrun uint64) (value *big.Int) {
 	return orderBook.Bids.MinPrice(dryrun)
 }
 
 // WorstAsk : get the worst ask of the order book
-func (orderBook *OrderBook) WorstAsk(dryrun bool) (value *big.Int) {
+func (orderBook *OrderBook) WorstAsk(dryrun uint64) (value *big.Int) {
 	return orderBook.Asks.MaxPrice(dryrun)
 }
 
 // processMarketOrder : process the market order
-func (orderBook *OrderBook) processMarketOrder(order *OrderItem, verbose bool, dryrun bool) ([]map[string]string, *OrderItem, error) {
+func (orderBook *OrderBook) processMarketOrder(order *OrderItem, verbose bool, dryrun uint64) ([]map[string]string, *OrderItem, error) {
 	var (
 		trades      []map[string]string
 		newTrades   []map[string]string
@@ -258,7 +258,7 @@ func (orderBook *OrderBook) processMarketOrder(order *OrderItem, verbose bool, d
 
 // processLimitOrder : process the limit order, can change the quote
 // If not care for performance, we should make a copy of quote to prevent further reference problem
-func (orderBook *OrderBook) processLimitOrder(order *OrderItem, verbose bool, dryrun bool) ([]map[string]string, *OrderItem, error) {
+func (orderBook *OrderBook) processLimitOrder(order *OrderItem, verbose bool, dryrun uint64) ([]map[string]string, *OrderItem, error) {
 	var (
 		trades      []map[string]string
 		newTrades   []map[string]string
@@ -328,7 +328,7 @@ func (orderBook *OrderBook) processLimitOrder(order *OrderItem, verbose bool, dr
 }
 
 // ProcessOrder : process the order
-func (orderBook *OrderBook) ProcessOrder(order *OrderItem, verbose bool, dryrun bool) ([]map[string]string, *OrderItem, error) {
+func (orderBook *OrderBook) ProcessOrder(order *OrderItem, verbose bool, dryrun uint64) ([]map[string]string, *OrderItem, error) {
 	var (
 		orderInBook *OrderItem
 		trades      []map[string]string
@@ -362,7 +362,7 @@ func (orderBook *OrderBook) ProcessOrder(order *OrderItem, verbose bool, dryrun 
 }
 
 // processOrderList : process the order list
-func (orderBook *OrderBook) processOrderList(side string, orderList *OrderList, quantityStillToTrade *big.Int, order *OrderItem, verbose bool, dryrun bool) (*big.Int, []map[string]string, *OrderItem, error) {
+func (orderBook *OrderBook) processOrderList(side string, orderList *OrderList, quantityStillToTrade *big.Int, order *OrderItem, verbose bool, dryrun uint64) (*big.Int, []map[string]string, *OrderItem, error) {
 	log.Debug("Process matching between order and orderlist")
 	quantityToTrade := CloneBigInt(quantityStillToTrade)
 	var (
@@ -452,7 +452,7 @@ func (orderBook *OrderBook) processOrderList(side string, orderList *OrderList, 
 
 // CancelOrder : cancel the order, just need ID, side and price, of course order must belong
 // to a price point as well
-func (orderBook *OrderBook) CancelOrder(order *OrderItem, dryrun bool) error {
+func (orderBook *OrderBook) CancelOrder(order *OrderItem, dryrun uint64) error {
 	key := GetKeyFromBig(big.NewInt(int64(order.OrderID)))
 	if order.Side == Bid {
 		orderInDB := orderBook.Bids.GetOrder(key, order.Price, dryrun)
@@ -481,12 +481,12 @@ func (orderBook *OrderBook) CancelOrder(order *OrderItem, dryrun bool) error {
 	return nil
 }
 
-func (orderBook *OrderBook) UpdateOrder(order *OrderItem, dryrun bool) error {
+func (orderBook *OrderBook) UpdateOrder(order *OrderItem, dryrun uint64) error {
 	return orderBook.ModifyOrder(order, order.OrderID, order.Price, dryrun)
 }
 
 // ModifyOrder : modify the order
-func (orderBook *OrderBook) ModifyOrder(order *OrderItem, orderID uint64, price *big.Int, dryrun bool) error {
+func (orderBook *OrderBook) ModifyOrder(order *OrderItem, orderID uint64, price *big.Int, dryrun uint64) error {
 	orderBook.UpdateTime()
 
 	key := GetKeyFromBig(new(big.Int).SetUint64(order.OrderID))
@@ -506,7 +506,7 @@ func (orderBook *OrderBook) ModifyOrder(order *OrderItem, orderID uint64, price 
 }
 
 // VolumeAtPrice : get volume at the current price
-func (orderBook *OrderBook) VolumeAtPrice(side string, price *big.Int, dryrun bool) *big.Int {
+func (orderBook *OrderBook) VolumeAtPrice(side string, price *big.Int, dryrun uint64) *big.Int {
 	volume := Zero()
 	if side == Bid {
 		if orderBook.Bids.PriceExist(price, dryrun) {

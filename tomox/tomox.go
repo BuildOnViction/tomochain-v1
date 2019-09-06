@@ -20,9 +20,9 @@ import (
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/hashicorp/golang-lru"
 	"golang.org/x/sync/syncmap"
 	"gopkg.in/fatih/set.v0"
-	"github.com/hashicorp/golang-lru"
 )
 
 const (
@@ -51,6 +51,11 @@ const (
 	pendingPrefix        = "XP"
 	orderProcessedLimit  = 1000
 	orderProcessLimit    = 20
+
+	// matching engine mode
+	NonDryrunMode           = 0
+	DryrunCommitNewWorkMode = 1
+	DryrunVerifyMode        = 2
 )
 
 type Config struct {
@@ -481,7 +486,7 @@ func (tomox *TomoX) postEvent(envelope *Envelope, isP2P bool) error {
 	}
 
 	if order.Status == Cancel {
-		err := tomox.CancelOrder(order, false)
+		err := tomox.CancelOrder(order, NonDryrunMode)
 		switch err {
 		case ErrDoesNotExist:
 			log.Error("Can't cancel order", "err", err)
@@ -629,11 +634,11 @@ func bytesToUintLittleEndian(b []byte) (res uint64) {
 }
 
 // list Orderbook by topic
-func (tomox *TomoX) GetOrderBook(pairName string, dryrun bool) (*OrderBook, error) {
+func (tomox *TomoX) GetOrderBook(pairName string, dryrun uint64) (*OrderBook, error) {
 	return tomox.getAndCreateIfNotExisted(pairName, dryrun)
 }
 
-func (tomox *TomoX) hasOrderBook(name string, dryrun bool) bool {
+func (tomox *TomoX) hasOrderBook(name string, dryrun uint64) bool {
 	key := crypto.Keccak256([]byte(name)) //name is already in lower format
 	orderBookItemKey := append([]byte(orderbookItemPrefix), key...)
 	val, err := tomox.db.Get(orderBookItemKey, &OrderBookItem{}, dryrun)
@@ -649,7 +654,7 @@ func (tomox *TomoX) hasOrderBook(name string, dryrun bool) bool {
 	return true
 }
 
-func (tomox *TomoX) getAndCreateIfNotExisted(pairName string, dryrun bool) (*OrderBook, error) {
+func (tomox *TomoX) getAndCreateIfNotExisted(pairName string, dryrun uint64) (*OrderBook, error) {
 
 	name := strings.ToLower(pairName)
 
@@ -744,7 +749,7 @@ func (tomox *TomoX) loadOrderCount() error {
 		err        error
 		val        interface{}
 	)
-	val, err = tomox.db.Get([]byte(orderCountKey), &[]byte{}, false)
+	val, err = tomox.db.Get([]byte(orderCountKey), &[]byte{}, NonDryrunMode)
 	if err != nil {
 		return err
 	}
@@ -762,13 +767,13 @@ func (tomox *TomoX) updateOrderCount(orderCount map[common.Address]*big.Int) err
 	if err != nil {
 		return err
 	}
-	if err := tomox.db.Put([]byte(orderCountKey), &blob, false); err != nil {
+	if err := tomox.db.Put([]byte(orderCountKey), &blob, NonDryrunMode); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (tomox *TomoX) CancelOrder(order *OrderItem, dryrun bool) error {
+func (tomox *TomoX) CancelOrder(order *OrderItem, dryrun uint64) error {
 	ob, err := tomox.getAndCreateIfNotExisted(order.PairName, dryrun)
 	if ob != nil && err == nil {
 
@@ -797,7 +802,7 @@ func (tomox *TomoX) CancelOrder(order *OrderItem, dryrun bool) error {
 	return err
 }
 
-func (tomox *TomoX) GetBidsTree(pairName string, dryrun bool) (*OrderTree, error) {
+func (tomox *TomoX) GetBidsTree(pairName string, dryrun uint64) (*OrderTree, error) {
 	ob, err := tomox.GetOrderBook(pairName, dryrun)
 	if err != nil {
 		return nil, err
@@ -805,7 +810,7 @@ func (tomox *TomoX) GetBidsTree(pairName string, dryrun bool) (*OrderTree, error
 	return ob.Bids, nil
 }
 
-func (tomox *TomoX) GetAsksTree(pairName string, dryrun bool) (*OrderTree, error) {
+func (tomox *TomoX) GetAsksTree(pairName string, dryrun uint64) (*OrderTree, error) {
 	ob, err := tomox.GetOrderBook(pairName, dryrun)
 	if err != nil {
 		return nil, err
@@ -815,7 +820,7 @@ func (tomox *TomoX) GetAsksTree(pairName string, dryrun bool) (*OrderTree, error
 
 func (tomox *TomoX) ProcessOrderPending() []TxDataMatch {
 	txMatches := []TxDataMatch{}
-	tomox.db.InitDryRunMode()
+	tomox.db.InitDryRunCommitNewWorkMode()
 
 	log.Debug("Get pending hashes")
 	pendingHashes := tomox.getPendingHashes()
@@ -832,7 +837,7 @@ func (tomox *TomoX) ProcessOrderPending() []TxDataMatch {
 
 						// if orderbook has been processed before in this block, it should be in dry-run mode
 						// otherwise it's in db
-						ob, err = tomox.getAndCreateIfNotExisted(order.PairName, true)
+						ob, err = tomox.getAndCreateIfNotExisted(order.PairName, DryrunCommitNewWorkMode)
 						if err != nil || ob == nil {
 							log.Error("Fail to get/create orderbook", "order.PairName", order.PairName)
 							continue
@@ -858,7 +863,7 @@ func (tomox *TomoX) ProcessOrderPending() []TxDataMatch {
 						*originalOrder = *order
 						originalOrder.Quantity = CloneBigInt(order.Quantity)
 
-						trades, orderInBook, err := ob.ProcessOrder(order, true, true)
+						trades, orderInBook, err := ob.ProcessOrder(order, true, DryrunCommitNewWorkMode)
 
 						// Remove order from db pending.
 						if err := tomox.RemovePendingHash(orderHash); err != nil {
@@ -937,8 +942,8 @@ func (tomox *TomoX) getOrderPending(orderHash common.Hash) *OrderItem {
 	prefix := []byte(pendingPrefix)
 	key := append(prefix, orderHash.Bytes()...)
 	log.Debug("Get order pending", "order", orderHash, "key", hex.EncodeToString(key))
-	if ok, _ := tomox.db.Has(key, false); ok {
-		val, err = tomox.db.Get(key, &OrderItem{}, false)
+	if ok, _ := tomox.db.Has(key, NonDryrunMode); ok {
+		val, err = tomox.db.Get(key, &OrderItem{}, NonDryrunMode)
 		if err != nil {
 			log.Error("Fail to get order pending", "err", err)
 
@@ -958,7 +963,7 @@ func (tomox *TomoX) addOrderPending(order *OrderItem) error {
 	key := append(prefix, order.Hash.Bytes()...)
 	// Insert new order pending.
 	log.Debug("Add order pending", "order", order, "key", hex.EncodeToString(key))
-	if err := tomox.db.Put(key, order, false); err != nil {
+	if err := tomox.db.Put(key, order, NonDryrunMode); err != nil {
 		log.Error("Fail to save order pending", "err", err)
 		return err
 	}
@@ -970,7 +975,7 @@ func (tomox *TomoX) RemoveOrderPending(orderHash common.Hash) error {
 	prefix := []byte(pendingPrefix)
 	key := append(prefix, orderHash.Bytes()...)
 	log.Debug("Remove order pending", "orderHash", orderHash, "key", hex.EncodeToString(key))
-	if err := tomox.db.Delete(key, false); err != nil {
+	if err := tomox.db.Delete(key, NonDryrunMode); err != nil {
 		log.Error("Fail to delete order pending", "err", err)
 		return err
 	}
@@ -994,7 +999,7 @@ func (tomox *TomoX) addPendingHash(orderHash common.Hash) error {
 	}
 	// Store pending hash.
 	key := []byte(pendingHash)
-	if err := tomox.db.Put(key, &pendingHashes, false); err != nil {
+	if err := tomox.db.Put(key, &pendingHashes, NonDryrunMode); err != nil {
 		log.Error("Fail to save order hash pending", "err", err)
 		return err
 	}
@@ -1015,7 +1020,7 @@ func (tomox *TomoX) RemovePendingHash(orderHash common.Hash) error {
 		}
 	}
 	// Store pending hash.
-	if err := tomox.db.Put([]byte(pendingHash), &pendingHashes, false); err != nil {
+	if err := tomox.db.Put([]byte(pendingHash), &pendingHashes, NonDryrunMode); err != nil {
 		log.Error("Fail to delete order hash pending", "err", err)
 		return err
 	}
@@ -1029,8 +1034,8 @@ func (tomox *TomoX) getPendingHashes() []common.Hash {
 		err error
 	)
 	key := []byte(pendingHash)
-	if ok, _ := tomox.db.Has(key, false); ok {
-		if val, err = tomox.db.Get(key, &[]common.Hash{}, false); err != nil {
+	if ok, _ := tomox.db.Has(key, NonDryrunMode); ok {
+		if val, err = tomox.db.Get(key, &[]common.Hash{}, NonDryrunMode); err != nil {
 			log.Error("Fail to get pending hash", "err", err)
 			return []common.Hash{}
 		}
@@ -1061,7 +1066,7 @@ func (tomox *TomoX) updatePairs(pairs map[string]bool) error {
 	if err != nil {
 		return err
 	}
-	if err := tomox.db.Put([]byte(activePairsKey), &blob, false); err != nil {
+	if err := tomox.db.Put([]byte(activePairsKey), &blob, NonDryrunMode); err != nil {
 		return err
 	}
 	return nil
@@ -1073,7 +1078,7 @@ func (tomox *TomoX) loadPairs() (map[string]bool, error) {
 		val   interface{}
 		err   error
 	)
-	val, err = tomox.db.Get([]byte(activePairsKey), &[]byte{}, false)
+	val, err = tomox.db.Get([]byte(activePairsKey), &[]byte{}, NonDryrunMode)
 	if err != nil {
 		return map[string]bool{}, err
 	}
@@ -1123,7 +1128,7 @@ func (tomox *TomoX) Snapshot(blockHash common.Hash) error {
 		return err
 	}
 
-	if err = tomox.db.Put([]byte(latestSnapshotKey), &blockHash, false); err != nil {
+	if err = tomox.db.Put([]byte(latestSnapshotKey), &blockHash, NonDryrunMode); err != nil {
 		return err
 	}
 
@@ -1148,7 +1153,7 @@ func (tomox *TomoX) loadSnapshot(hash common.Hash) error {
 	}(time.Now())
 
 	if hash == (common.Hash{}) {
-		if val, err = tomox.db.Get([]byte(latestSnapshotKey), &common.Hash{}, false); err != nil {
+		if val, err = tomox.db.Get([]byte(latestSnapshotKey), &common.Hash{}, NonDryrunMode); err != nil {
 			// no snapshot found
 			return err
 		}
@@ -1160,7 +1165,7 @@ func (tomox *TomoX) loadSnapshot(hash common.Hash) error {
 	for pair := range snap.OrderBooks {
 		ob, err = snap.RestoreOrderBookFromSnapshot(tomox.db, pair)
 		if err == nil {
-			if err := ob.Save(false); err != nil {
+			if err := ob.Save(NonDryrunMode); err != nil {
 				return err
 			}
 		}
@@ -1185,7 +1190,7 @@ func (tomox *TomoX) ApplyTxMatches(orderHashes []common.Hash) error {
 		}
 		log.Debug("Mark order as processed", "orderHash", hex.EncodeToString(hash.Bytes()))
 	}
-	tomox.db.InitDryRunMode()
+	tomox.db.InitDryRunVerifyMode()
 	return nil
 }
 
@@ -1213,7 +1218,7 @@ func (tomox *TomoX) SyncDataToSDKNode(txDataMatch TxDataMatch, txHash common.Has
 	}
 	order.Status = sdktypes.OrderStatusOpen
 	log.Debug("Put processed order", "order", order)
-	if err := db.Put(order.Hash.Bytes(), order, false); err != nil {
+	if err := db.Put(order.Hash.Bytes(), order, NonDryrunMode); err != nil {
 		return fmt.Errorf("SDKNode: failed to put processed order. Error: %s", err.Error())
 	}
 
@@ -1255,7 +1260,7 @@ func (tomox *TomoX) SyncDataToSDKNode(txDataMatch TxDataMatch, txHash common.Has
 
 		tradeSDK.Hash = tradeSDK.ComputeHash()
 		log.Debug("TRADE history", "order", order, "trade", tradeSDK)
-		if err := db.Put(EmptyKey(), tradeSDK, false); err != nil {
+		if err := db.Put(EmptyKey(), tradeSDK, NonDryrunMode); err != nil {
 			return fmt.Errorf("SDKNode: failed to store tradeSDK %s", err.Error())
 		}
 
@@ -1279,7 +1284,7 @@ func (tomox *TomoX) SyncDataToSDKNode(txDataMatch TxDataMatch, txHash common.Has
 	if orderInBook != nil {
 		existingOrderInDB := &OrderItem{}
 		key := orderInBook.Hash.Bytes()
-		data, err := tomox.db.Get(key, &OrderItem{}, false)
+		data, err := tomox.db.Get(key, &OrderItem{}, NonDryrunMode)
 		if data != nil && err == nil {
 			existingOrderInDB = data.(*OrderItem)
 			log.Debug("OrderInBook found in database", "order", existingOrderInDB)
@@ -1287,7 +1292,7 @@ func (tomox *TomoX) SyncDataToSDKNode(txDataMatch TxDataMatch, txHash common.Has
 				log.Debug("Update status to PARTIAL_FILLED", "order", existingOrderInDB)
 				// if order already matched but still exist in orderbook, then update status to OrderStatusPartialFilled
 				existingOrderInDB.Status = sdktypes.OrderStatusPartialFilled
-				if err = db.Put(key, existingOrderInDB, false); err != nil {
+				if err = db.Put(key, existingOrderInDB, NonDryrunMode); err != nil {
 					return fmt.Errorf("SDKNode: failed to update status to %s %s", existingOrderInDB.Status, err.Error())
 				}
 			}
@@ -1302,7 +1307,7 @@ func (tomox *TomoX) updateStatusOfMatchedOrder(hashString string, filledAmount *
 	if err != nil {
 		return fmt.Errorf("SDKNode: failed to decode orderKey. Key: %s", hashString)
 	}
-	val, err := db.Get(orderHashBytes, &OrderItem{}, false)
+	val, err := db.Get(orderHashBytes, &OrderItem{}, NonDryrunMode)
 	if err != nil || val == nil {
 		return fmt.Errorf("SDKNode: failed to get order. Key: %s", hashString)
 	}
@@ -1312,7 +1317,7 @@ func (tomox *TomoX) updateStatusOfMatchedOrder(hashString string, filledAmount *
 	updatedFillAmount := new(big.Int)
 	updatedFillAmount.Add(matchedOrder.FilledAmount, filledAmount)
 	matchedOrder.FilledAmount = updatedFillAmount
-	if err = db.Put(matchedOrder.Hash.Bytes(), matchedOrder, false); err != nil {
+	if err = db.Put(matchedOrder.Hash.Bytes(), matchedOrder, NonDryrunMode); err != nil {
 		return fmt.Errorf("SDKNode: failed to update matchedOrder to sdkNode %s", err.Error())
 	}
 	return nil

@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"encoding/hex"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/common"
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/pkg/errors"
 )
@@ -20,11 +20,12 @@ type BatchItem struct {
 }
 
 type BatchDatabase struct {
-	db             *ethdb.LDBDatabase
-	emptyKey       []byte
-	cacheItems     *lru.Cache // Cache for reading
-	dryRunCache    *lru.Cache
-	Debug          bool
+	db                       *ethdb.LDBDatabase
+	emptyKey                 []byte
+	cacheItems               *lru.Cache // Cache for reading
+	dryRunCacheCommitNewWork *lru.Cache
+	dryRunCacheVerify        *lru.Cache
+	Debug                    bool
 }
 
 // NewBatchDatabase use rlp as encoding
@@ -45,17 +46,17 @@ func NewBatchDatabaseWithEncode(datadir string, cacheLimit int) *BatchDatabase {
 	}
 
 	cacheItems, _ := lru.New(itemCacheLimit)
-	dryRunCache, _ := lru.New(itemCacheLimit)
+	dryRunCacheVerify, _ := lru.New(itemCacheLimit)
+	dryRunCacheCommitNewWork, _ := lru.New(itemCacheLimit)
 
 	batchDB := &BatchDatabase{
-		db:             db,
-		cacheItems:     cacheItems,
-		emptyKey:       EmptyKey(), // pre alloc for comparison
-		dryRunCache:    dryRunCache,
+		db:                       db,
+		cacheItems:               cacheItems,
+		emptyKey:                 EmptyKey(), // pre alloc for comparison
+		dryRunCacheVerify:        dryRunCacheVerify,
+		dryRunCacheCommitNewWork: dryRunCacheCommitNewWork,
 	}
-
 	return batchDB
-
 }
 
 func (db *BatchDatabase) IsEmptyKey(key []byte) bool {
@@ -66,14 +67,18 @@ func (db *BatchDatabase) getCacheKey(key []byte) string {
 	return hex.EncodeToString(key)
 }
 
-func (db *BatchDatabase) Has(key []byte, dryrun bool) (bool, error) {
+func (db *BatchDatabase) Has(key []byte, dryrun uint64) (bool, error) {
 	if db.IsEmptyKey(key) {
 		return false, nil
 	}
 	cacheKey := db.getCacheKey(key)
 
-	if dryrun {
-		if db.dryRunCache.Contains(cacheKey) {
+	if dryrun == DryrunVerifyMode {
+		if db.dryRunCacheVerify.Contains(cacheKey) {
+			return true, nil
+		}
+	} else if dryrun == DryrunCommitNewWorkMode {
+		if db.dryRunCacheCommitNewWork.Contains(cacheKey) {
 			return true, nil
 		}
 	} else if db.cacheItems.Contains(cacheKey) {
@@ -84,7 +89,7 @@ func (db *BatchDatabase) Has(key []byte, dryrun bool) (bool, error) {
 	return db.db.Has(key)
 }
 
-func (db *BatchDatabase) Get(key []byte, val interface{}, dryrun bool) (interface{}, error) {
+func (db *BatchDatabase) Get(key []byte, val interface{}, dryrun uint64) (interface{}, error) {
 
 	if db.IsEmptyKey(key) {
 		return nil, nil
@@ -92,14 +97,18 @@ func (db *BatchDatabase) Get(key []byte, val interface{}, dryrun bool) (interfac
 
 	cacheKey := db.getCacheKey(key)
 
-	if dryrun {
-		if value, ok := db.dryRunCache.Get(cacheKey); ok {
+	if dryrun == DryrunVerifyMode {
+		if value, ok := db.dryRunCacheVerify.Get(cacheKey); ok {
+			return value, nil
+		}
+	} else if dryrun == DryrunCommitNewWorkMode {
+		if value, ok := db.dryRunCacheCommitNewWork.Get(cacheKey); ok {
 			return value, nil
 		}
 	}
 
 	// for dry-run mode, do not read cacheItems
-	if cached, ok := db.cacheItems.Get(cacheKey); ok && !dryrun {
+	if cached, ok := db.cacheItems.Get(cacheKey); ok && dryrun == NonDryrunMode {
 		val = cached
 	} else {
 
@@ -119,7 +128,7 @@ func (db *BatchDatabase) Get(key []byte, val interface{}, dryrun bool) (interfac
 		}
 
 		// update cache when reading
-		if !dryrun {
+		if dryrun == NonDryrunMode {
 			db.cacheItems.Add(cacheKey, val)
 		}
 
@@ -128,10 +137,13 @@ func (db *BatchDatabase) Get(key []byte, val interface{}, dryrun bool) (interfac
 	return val, nil
 }
 
-func (db *BatchDatabase) Put(key []byte, val interface{}, dryrun bool) error {
+func (db *BatchDatabase) Put(key []byte, val interface{}, dryrun uint64) error {
 	cacheKey := db.getCacheKey(key)
-	if dryrun {
-		db.dryRunCache.Add(cacheKey, val)
+	if dryrun == DryrunVerifyMode {
+		db.dryRunCacheVerify.Add(cacheKey, val)
+		return nil
+	} else if dryrun == DryrunCommitNewWorkMode {
+		db.dryRunCacheCommitNewWork.Add(cacheKey, val)
 		return nil
 	}
 
@@ -143,14 +155,17 @@ func (db *BatchDatabase) Put(key []byte, val interface{}, dryrun bool) error {
 	return db.db.Put(key, value)
 }
 
-func (db *BatchDatabase) Delete(key []byte, dryrun bool) error {
+func (db *BatchDatabase) Delete(key []byte, dryrun uint64) error {
 	// by default, we force delete both db and cache,
 	// for better performance, we can mark a Deleted flag, to do batch delete
 	cacheKey := db.getCacheKey(key)
 
 	//mark it to nil in dryrun cache
-	if dryrun {
-		db.dryRunCache.Add(cacheKey, nil)
+	if dryrun == DryrunVerifyMode {
+		db.dryRunCacheVerify.Add(cacheKey, nil)
+		return nil
+	} else if dryrun == DryrunCommitNewWorkMode {
+		db.dryRunCacheCommitNewWork.Add(cacheKey, nil)
 		return nil
 	}
 
@@ -158,24 +173,29 @@ func (db *BatchDatabase) Delete(key []byte, dryrun bool) error {
 	return db.db.Delete(key)
 }
 
-func (db *BatchDatabase) InitDryRunMode() {
-	log.Debug("Start dry-run mode, clear old data")
-	db.dryRunCache.Purge()
+func (db *BatchDatabase) InitDryRunVerifyMode() {
+	log.Debug("Start dryrunVerify mode, clear old data")
+	db.dryRunCacheVerify.Purge()
+}
+
+func (db *BatchDatabase) InitDryRunCommitNewWorkMode() {
+	log.Debug("Start dryrunCommitNewWork mode, clear old data")
+	db.dryRunCacheCommitNewWork.Purge()
 }
 
 func (db *BatchDatabase) SaveDryRunResult() error {
 
 	batch := db.db.NewBatch()
-	for _, cacheKey := range db.dryRunCache.Keys() {
+	for _, cacheKey := range db.dryRunCacheVerify.Keys() {
 		key, err := hex.DecodeString(cacheKey.(string))
 		if err != nil {
 			log.Error("Can't save dry-run result (hex.DecodeString)", "err", err)
 			return err
 		}
-		val, ok := db.dryRunCache.Get(cacheKey)
+		val, ok := db.dryRunCacheVerify.Get(cacheKey)
 		if !ok {
 			err := errors.New("can't get item from dryrun cache")
-			log.Error("Can't save dry-run result (db.dryRunCache.Get)", "err", err)
+			log.Error("Can't save dry-run result (db.dryRunCacheVerify.Get)", "err", err)
 			return err
 		}
 		if val == nil {
@@ -199,7 +219,7 @@ func (db *BatchDatabase) SaveDryRunResult() error {
 		log.Debug("Saved dry-run result to DB", "cacheKey", hex.EncodeToString(key), "value", ToJSON(val))
 	}
 	// purge cache data
-	db.dryRunCache.Purge()
+	db.dryRunCacheVerify.Purge()
 	// purge reading cache to refresh data from db
 	db.cacheItems.Purge()
 	return batch.Write()

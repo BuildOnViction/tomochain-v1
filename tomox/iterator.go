@@ -26,7 +26,7 @@ func (tree *Tree) Iterator() Iterator {
 // If Next() returns true, then next element's key and value can be retrieved by Key() and Value().
 // If Next() was called for the first time, then it will point the iterator to the first element if it exists.
 // Modifies the state of the iterator.
-func (iterator *Iterator) Next(dryrun bool) bool {
+func (iterator *Iterator) Next(dryrun uint64) bool {
 	if iterator.position == end {
 		goto end
 	}
@@ -77,7 +77,7 @@ between:
 // Prev moves the iterator to the previous element and returns true if there was a previous element in the container.
 // If Prev() returns true, then previous element's key and value can be retrieved by Key() and Value().
 // Modifies the state of the iterator.
-func (iterator *Iterator) Prev(dryrun bool) bool {
+func (iterator *Iterator) Prev(dryrun uint64) bool {
 	if iterator.position == begin {
 		goto begin
 	}
@@ -145,7 +145,7 @@ func (iterator *Iterator) End() {
 // First moves the iterator to the first element and returns true if there was a first element in the container.
 // If First() returns true, then first element's key and value can be retrieved by Key() and Value().
 // Modifies the state of the iterator
-func (iterator *Iterator) First(dryrun bool) bool {
+func (iterator *Iterator) First(dryrun uint64) bool {
 	iterator.Begin()
 	return iterator.Next(dryrun)
 }
@@ -153,7 +153,7 @@ func (iterator *Iterator) First(dryrun bool) bool {
 // Last moves the iterator to the last element and returns true if there was a last element in the container.
 // If Last() returns true, then last element's key and value can be retrieved by Key() and Value().
 // Modifies the state of the iterator.
-func (iterator *Iterator) Last(dryrun bool) bool {
+func (iterator *Iterator) Last(dryrun uint64) bool {
 	iterator.End()
 	return iterator.Prev(dryrun)
 }
