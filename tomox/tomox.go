@@ -1050,7 +1050,7 @@ func (tomox *TomoX) getPendingHashes() []common.Hash {
 }
 
 func (tomox *TomoX) addProcessedOrderHash(orderHash common.Hash) error {
-	if tomox.processedOrderCache.Add(orderHash, true) {
+	if !tomox.processedOrderCache.Add(orderHash, true) {
 		return nil
 	} else {
 		return fmt.Errorf("Can't add processed order to cache: orderHash - %s", orderHash.Hex())
@@ -1186,7 +1186,6 @@ func (tomox *TomoX) ApplyTxMatches(orderHashes []common.Hash) error {
 	for _, hash := range orderHashes {
 		if err := tomox.addProcessedOrderHash(hash); err != nil {
 			log.Error("Failed to mark order as processed", "err", err)
-			return err
 		}
 		log.Debug("Mark order as processed", "orderHash", hex.EncodeToString(hash.Bytes()))
 	}
