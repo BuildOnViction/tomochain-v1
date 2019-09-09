@@ -142,6 +142,7 @@ type BlockChain struct {
 	processor Processor // block processor interface
 	validator Validator // block and state validator interface
 	vmConfig  vm.Config
+	insertBlockDone chan *big.Int
 
 	badBlocks   *lru.Cache // Bad block cache
 	IPCEndpoint string
@@ -185,6 +186,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		engine:               engine,
 		vmConfig:             vmConfig,
 		badBlocks:            badBlocks,
+		insertBlockDone:      make(chan *big.Int, 1),
 	}
 	bc.SetValidator(NewBlockValidator(chainConfig, bc, engine))
 	bc.SetProcessor(NewStateProcessor(chainConfig, bc, engine))
@@ -1250,6 +1252,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 			blockInsertTimer.UpdateSince(bstart)
 			events = append(events, ChainSideEvent{block})
 		}
+		bc.markBlockInserted(block)
 		stats.processed++
 		stats.usedGas += usedGas
 		stats.report(chain, i, bc.stateCache.TrieDB().Size())
@@ -1411,6 +1414,7 @@ func (bc *BlockChain) insertBlock(block *types.Block) ([]interface{}, []*types.L
 		events        = make([]interface{}, 0, 1)
 		coalescedLogs []*types.Log
 	)
+	bc.waitForInsertingBlock(block)
 	if _, check := bc.downloadingBlock.Get(block.Hash()); check {
 		log.Debug("Stop fetcher a block because downloading", "number", block.NumberU64(), "hash", block.Hash())
 		return events, coalescedLogs, nil
@@ -1478,6 +1482,7 @@ func (bc *BlockChain) insertBlock(block *types.Block) ([]interface{}, []*types.L
 		blockInsertTimer.Update(result.proctime)
 		events = append(events, ChainSideEvent{block})
 	}
+	bc.markBlockInserted(block)
 	stats.processed++
 	stats.usedGas += result.usedGas
 	stats.report(types.Blocks{block}, 0, bc.stateCache.TrieDB().Size())
@@ -1943,6 +1948,36 @@ func (bc *BlockChain) UpdateM1() error {
 		log.Info("Masternodes are ready for the next epoch")
 	}
 	return nil
+}
+
+func (bc *BlockChain) waitForInsertingBlock(block *types.Block) {
+	if block.NumberU64() <= bc.Config().Posv.Epoch {
+		return
+	}
+	for {
+		select {
+		case lastBlockNumber := <-bc.insertBlockDone:
+			if big.NewInt(0).Add(lastBlockNumber, big.NewInt(1)).Cmp(block.Number()) >= 0 {
+				return
+			}
+		case <-time.After(2*time.Second):
+			log.Error("Timeout: Waiting InsertBlockDone", "waitingBlock", block.NumberU64()-1)
+			return
+		}
+	}
+}
+
+func (bc *BlockChain) markBlockInserted(block *types.Block) {
+	if block.NumberU64() >= bc.Config().Posv.Epoch {
+		log.Debug("InsertBlockDone", "number", block.NumberU64())
+		select {
+		case bc.insertBlockDone <- block.Number(): // put into the channel unless it is full
+		default:
+			// Channel full. Pop it first
+			<-bc.insertBlockDone
+			bc.insertBlockDone <- block.Number()
+		}
+	}
 }
 
 func logDataToSdkNode(tomoXService *tomox.TomoX, transactions types.Transactions, statedb *state.StateDB) error {
