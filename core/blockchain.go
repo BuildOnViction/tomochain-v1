@@ -138,11 +138,11 @@ type BlockChain struct {
 	procInterrupt int32          // interrupt signaler for block processing
 	wg            sync.WaitGroup // chain processing wait group for shutting down
 
-	engine    consensus.Engine
-	processor Processor // block processor interface
-	validator Validator // block and state validator interface
-	vmConfig  vm.Config
-	insertBlockDone chan *big.Int
+	engine         consensus.Engine
+	processor      Processor // block processor interface
+	validator      Validator // block and state validator interface
+	vmConfig       vm.Config
+	canStartVerify uint64 // can start verify block
 
 	badBlocks   *lru.Cache // Bad block cache
 	IPCEndpoint string
@@ -186,7 +186,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		engine:               engine,
 		vmConfig:             vmConfig,
 		badBlocks:            badBlocks,
-		insertBlockDone:      make(chan *big.Int, 1),
+		canStartVerify:      1,
 	}
 	bc.SetValidator(NewBlockValidator(chainConfig, bc, engine))
 	bc.SetProcessor(NewStateProcessor(chainConfig, bc, engine))
@@ -1070,7 +1070,6 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 
 	bc.chainmu.Lock()
 	defer bc.chainmu.Unlock()
-
 	// A queued approach to delivering events. This is generally
 	// faster than direct delivery and requires much less mutex
 	// acquiring.
@@ -1089,11 +1088,20 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 		seals[i] = false
 		bc.downloadingBlock.Add(block.Hash(), true)
 	}
+	log.Debug("From downloader: Trying to insert chain")
 	abort, results := bc.engine.VerifyHeaders(bc, headers, seals)
 	defer close(abort)
+	defer bc.markBlockInserted(0)
 
 	// Iterate over the blocks and insert when the verifier permits
 	for i, block := range chain {
+		if block.NumberU64() > bc.Config().Posv.Epoch {
+			if err := bc.waitForInsertingBlock(block.NumberU64()); err != nil {
+				return i, events, coalescedLogs, nil
+			}
+			log.Debug("locking verify block now - downloader", "block number", block.NumberU64())
+			atomic.StoreUint64(&bc.canStartVerify, 0)
+		}
 		// If the chain is terminating, stop processing blocks
 		if atomic.LoadInt32(&bc.procInterrupt) == 1 {
 			log.Debug("Premature abort during blocks processing")
@@ -1117,6 +1125,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 			// this number we did a rollback and we should reimport it nonetheless.
 			if bc.CurrentBlock().NumberU64() >= block.NumberU64() {
 				stats.ignored++
+				bc.markBlockInserted(block.NumberU64())
 				continue
 			}
 
@@ -1129,11 +1138,13 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 			}
 			bc.futureBlocks.Add(block.Hash(), block)
 			stats.queued++
+			bc.markBlockInserted(block.NumberU64())
 			continue
 
 		case err == consensus.ErrUnknownAncestor && bc.futureBlocks.Contains(block.ParentHash()):
 			bc.futureBlocks.Add(block.Hash(), block)
 			stats.queued++
+			bc.markBlockInserted(block.NumberU64())
 			continue
 
 		case err == consensus.ErrPrunedAncestor:
@@ -1146,6 +1157,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 				if err = bc.WriteBlockWithoutState(block, externTd); err != nil {
 					return i, events, coalescedLogs, err
 				}
+				bc.markBlockInserted(block.NumberU64())
 				continue
 			}
 			// Competitor chain beat canonical, gather all blocks from the common ancestor
@@ -1252,7 +1264,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 			blockInsertTimer.UpdateSince(bstart)
 			events = append(events, ChainSideEvent{block})
 		}
-		bc.markBlockInserted(block)
+		bc.markBlockInserted(block.NumberU64())
 		stats.processed++
 		stats.usedGas += usedGas
 		stats.report(chain, i, bc.stateCache.TrieDB().Size())
@@ -1285,7 +1297,16 @@ func (bc *BlockChain) InsertBlock(block *types.Block) error {
 }
 
 func (bc *BlockChain) PrepareBlock(block *types.Block) (err error) {
-	defer log.Debug("Done prepare block ", "number", block.NumberU64(), "hash", block.Hash(), "validator", block.Header().Validator, "err", err)
+	defer func(error){
+		log.Debug("Done prepare block ", "number", block.NumberU64(), "hash", block.Hash(), "validator", block.Header().Validator, "err", err)
+
+		// PrepareBlock() has failed. Unlocking now!
+		if err != nil {
+			log.Debug("Unlocking verify due to", "err", err)
+			bc.markBlockInserted(block.NumberU64())
+		}
+	}(err)
+	//defer log.Debug("Done prepare block ", "number", block.NumberU64(), "hash", block.Hash(), "validator", block.Header().Validator, "err", err)
 	if _, check := bc.resultProcess.Get(block.Hash()); check {
 		log.Debug("Stop prepare a block because the result cached", "number", block.NumberU64(), "hash", block.Hash(), "validator", block.Header().Validator)
 		return nil
@@ -1338,6 +1359,22 @@ func (bc *BlockChain) getResultBlock(block *types.Block, verifiedM2 bool) (*Resu
 	}
 	// Wait for the block's verification to complete
 	bstart := time.Now()
+
+	log.Debug("From fetcher: Trying to validate block body", "block", block.NumberU64())
+
+	// FIXME: Exceptional case here
+	// PrepareBlock() has done successfully but the result block cache isn't found
+	// Thus we have to unlock immediately.
+	if verifiedM2 {
+		bc.markBlockInserted(block.NumberU64())
+	}
+	if block.NumberU64() > bc.Config().Posv.Epoch {
+		if err := bc.waitForInsertingBlock(block.NumberU64()); err != nil {
+			return nil, err
+		}
+		log.Debug("locking verify block now - fetcher", "block number", block.NumberU64())
+		atomic.StoreUint64(&bc.canStartVerify, 0)
+	}
 	err := bc.Validator().ValidateBody(block)
 	switch {
 	case err == ErrKnownBlock:
@@ -1414,7 +1451,8 @@ func (bc *BlockChain) insertBlock(block *types.Block) ([]interface{}, []*types.L
 		events        = make([]interface{}, 0, 1)
 		coalescedLogs []*types.Log
 	)
-	bc.waitForInsertingBlock(block)
+	defer bc.markBlockInserted(block.NumberU64())
+
 	if _, check := bc.downloadingBlock.Get(block.Hash()); check {
 		log.Debug("Stop fetcher a block because downloading", "number", block.NumberU64(), "hash", block.Hash())
 		return events, coalescedLogs, nil
@@ -1482,7 +1520,6 @@ func (bc *BlockChain) insertBlock(block *types.Block) ([]interface{}, []*types.L
 		blockInsertTimer.Update(result.proctime)
 		events = append(events, ChainSideEvent{block})
 	}
-	bc.markBlockInserted(block)
 	stats.processed++
 	stats.usedGas += result.usedGas
 	stats.report(types.Blocks{block}, 0, bc.stateCache.TrieDB().Size())
@@ -1950,34 +1987,26 @@ func (bc *BlockChain) UpdateM1() error {
 	return nil
 }
 
-func (bc *BlockChain) waitForInsertingBlock(block *types.Block) {
-	if block.NumberU64() <= bc.Config().Posv.Epoch {
-		return
-	}
+func (bc *BlockChain) waitForInsertingBlock(blockNumber uint64) error {
 	for {
+		//headBlockNumber := atomic.LoadUint64(&bc.canStartVerify)
+		//if blockNumber <= headBlockNumber+1 {
+		//	return nil
+		//}
+		if atomic.LoadUint64(&bc.canStartVerify) == 1 {
+			return nil
+		}
 		select {
-		case lastBlockNumber := <-bc.insertBlockDone:
-			if big.NewInt(0).Add(lastBlockNumber, big.NewInt(1)).Cmp(block.Number()) >= 0 {
-				return
-			}
-		case <-time.After(2*time.Second):
-			log.Error("Timeout: Waiting InsertBlockDone", "waitingBlock", block.NumberU64()-1)
-			return
+		case <-time.After(10 * time.Second):
+			log.Error("Timeout: Waiting for unlocking verify", "waitingBlock", blockNumber-1)
+			return fmt.Errorf("invalid block. PropagatedBlock: %v", blockNumber)
 		}
 	}
 }
 
-func (bc *BlockChain) markBlockInserted(block *types.Block) {
-	if block.NumberU64() >= bc.Config().Posv.Epoch {
-		log.Debug("InsertBlockDone", "number", block.NumberU64())
-		select {
-		case bc.insertBlockDone <- block.Number(): // put into the channel unless it is full
-		default:
-			// Channel full. Pop it first
-			<-bc.insertBlockDone
-			bc.insertBlockDone <- block.Number()
-		}
-	}
+func (bc *BlockChain) markBlockInserted(number uint64) {
+	log.Debug("Can start verify now", "block number", number)
+	atomic.StoreUint64(&bc.canStartVerify, 1)
 }
 
 func logDataToSdkNode(tomoXService *tomox.TomoX, transactions types.Transactions, statedb *state.StateDB) error {
