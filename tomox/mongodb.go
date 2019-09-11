@@ -32,10 +32,15 @@ type MongoDatabase struct {
 // InitSession initializes a new session with mongodb
 func NewMongoDatabase(session *mgo.Session, mongoURL string, cacheLimit int) (*MongoDatabase, error) {
 	dbName := "tomodex"
+	Host := []string{
+		"localhost:27017",
+		"localhost:27018",
+		"localhost:27019",
+	}
 	mongoURL = "mongodb://localhost:27017,localhost:27018,localhost:27019/?replicaSet=rs0"
 	if session == nil {
 		// Initialize new session
-		ns, err := mgo.Dial(mongoURL)
+		ns, err := mgo.DialWithInfo(&mgo.DialInfo{Addrs:Host, Database: dbName, ReplicaSetName: "rs0"})
 		if err != nil {
 			return nil, err
 		}
