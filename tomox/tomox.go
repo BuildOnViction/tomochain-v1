@@ -1241,7 +1241,7 @@ func (tomox *TomoX) LoadSnapshot(hash common.Hash) error {
 func (tomox *TomoX) ApplyTxMatches(orders []*OrderItem, blockHash common.Hash) error {
 	if !tomox.IsSDKNode() {
 		if err := tomox.db.SaveDryRunResult(blockHash); err != nil {
-			log.Error("Failed to save dry-run result")
+			log.Error("Failed to save dry-run result", "err", err)
 			return err
 		}
 	}

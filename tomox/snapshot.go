@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"math/big"
 )
 
@@ -279,4 +280,16 @@ func (s *Snapshot) RestoreOrderTree(treeSnap *OrderTreeSnapshot, tree *OrderTree
 		return tree, err
 	}
 	return tree, nil
+}
+func GetNearestSnapshotBlock(blockNum uint64) uint64 {
+	return blockNum - (blockNum % SnapshotInterval)
+}
+
+func (tomox *TomoX) ApplyDryrunCache(blockHash common.Hash) error {
+	log.Debug("Apply dryrunCache to snapshot", "blockhash", blockHash)
+	if err := tomox.db.SaveDryRunResult(blockHash); err != nil {
+		log.Error("Failed to save dry-run result to snapshot", "err", err)
+		return err
+	}
+	return nil
 }

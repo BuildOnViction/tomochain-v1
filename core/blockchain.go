@@ -1143,9 +1143,6 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 	if ok {
 		tomoXService = engine.GetTomoXService()
 	}
-	if tomoXService == nil {
-		return 0, nil, nil, tomox.ErrTomoXServiceNotFound
-	}
 
 	// Do a sanity check that the provided chain is actually ordered and linked
 	for i := 1; i < len(chain); i++ {
@@ -1322,24 +1319,26 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 			if err != nil {
 				return i, events, coalescedLogs, err
 			}
-			if len(processedOrders) > 0 {
-				log.Debug("Applying TxMatches of block", "number", block.NumberU64(), "hash", block.Hash(), "hash_novalidator", block.HashNoValidator())
-				if err = tomoXService.ApplyTxMatches(processedOrders, block.HashNoValidator()); err != nil {
-					return i, events, coalescedLogs, err
-				}
-				if tomoXService.IsSDKNode() {
-					currentState, err := bc.State()
-					if err != nil {
+			if tomoXService != nil {
+				if len(processedOrders) > 0 {
+					log.Debug("Applying TxMatches of block", "number", block.NumberU64(), "hash", block.Hash(), "hash_novalidator", block.HashNoValidator())
+					if err = tomoXService.ApplyTxMatches(processedOrders, block.HashNoValidator()); err != nil {
 						return i, events, coalescedLogs, err
 					}
-					if err := logDataToSdkNode(tomoXService, txMatchBatchData, currentState); err != nil {
-						return i, events, coalescedLogs, err
+					if tomoXService.IsSDKNode() {
+						currentState, err := bc.State()
+						if err != nil {
+							return i, events, coalescedLogs, err
+						}
+						if err := logDataToSdkNode(tomoXService, txMatchBatchData, currentState); err != nil {
+							return i, events, coalescedLogs, err
+						}
 					}
 				}
-			}
-			if bc.CurrentHeader().Number.Uint64()%tomox.SnapshotInterval == 0 && !tomoXService.IsSDKNode() {
-				if err := tomoXService.Snapshot(block.Hash()); err != nil {
-					log.Error("Failed to snapshot tomox", "err", err)
+				if bc.CurrentHeader().Number.Uint64()%tomox.SnapshotInterval == 0 && !tomoXService.IsSDKNode() {
+					if err := tomoXService.Snapshot(block.Hash()); err != nil {
+						log.Error("Failed to snapshot tomox", "err", err)
+					}
 				}
 			}
 
@@ -1573,10 +1572,8 @@ func (bc *BlockChain) insertBlock(block *types.Block) ([]interface{}, []*types.L
 		if ok {
 			tomoXService = engine.GetTomoXService()
 		}
-		if tomoXService == nil {
-			return events, coalescedLogs, tomox.ErrTomoXServiceNotFound
-		}
-			txMatchBatchData, err := ExtractMatchingTransactions(block.Transactions())
+
+		txMatchBatchData, err := ExtractMatchingTransactions(block.Transactions())
 		if err != nil {
 			return events, coalescedLogs, err
 		}
@@ -1585,28 +1582,30 @@ func (bc *BlockChain) insertBlock(block *types.Block) ([]interface{}, []*types.L
 		if err != nil {
 			return events, coalescedLogs, err
 		}
-		if len(processedOrders) > 0 {
-			log.Debug("Applying TxMatches of block", "number", block.NumberU64(), "hash", block.Hash(), "hash_novalidator", block.HashNoValidator())
-			if err = tomoXService.ApplyTxMatches(processedOrders, block.HashNoValidator()); err != nil {
-				return events, coalescedLogs, err
+		if tomoXService != nil {
+			if len(processedOrders) > 0 {
+				log.Debug("Applying TxMatches of block", "number", block.NumberU64(), "hash", block.Hash(), "hash_novalidator", block.HashNoValidator())
+				if err = tomoXService.ApplyTxMatches(processedOrders, block.HashNoValidator()); err != nil {
+					return events, coalescedLogs, err
+				}
+				if tomoXService.IsSDKNode() {
+					currentState, err := bc.State()
+					if err != nil {
+						return events, coalescedLogs, err
+					}
+					txMatchBatchData, err := ExtractMatchingTransactions(block.Transactions())
+					if err != nil {
+						return events, coalescedLogs, err
+					}
+					if err := logDataToSdkNode(tomoXService, txMatchBatchData, currentState); err != nil {
+						return events, coalescedLogs, err
+					}
+				}
 			}
-			if tomoXService.IsSDKNode() {
-				currentState, err := bc.State()
-				if err != nil {
-					return events, coalescedLogs, err
+			if bc.CurrentHeader().Number.Uint64()%tomox.SnapshotInterval == 0 && !tomoXService.IsSDKNode() {
+				if err := tomoXService.Snapshot(block.Hash()); err != nil {
+					log.Error("Failed to snapshot tomox", "err", err)
 				}
-				txMatchBatchData, err := ExtractMatchingTransactions(block.Transactions())
-				if err != nil {
-					return events, coalescedLogs, err
-				}
-				if err := logDataToSdkNode(tomoXService, txMatchBatchData, currentState); err != nil {
-					return events, coalescedLogs, err
-				}
-			}
-		}
-		if bc.CurrentHeader().Number.Uint64()%tomox.SnapshotInterval == 0 && !tomoXService.IsSDKNode() {
-			if err := tomoXService.Snapshot(block.Hash()); err != nil {
-				log.Error("Failed to snapshot tomox", "err", err)
 			}
 		}
 
@@ -1763,7 +1762,7 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 	}
 
 	// reorgTomoX from snapshot
-	if err:= bc.reorgTomox(commonBlock.Hash()); err != nil {
+	if err := bc.reorgTomox(commonBlock); err != nil {
 		return err
 	}
 	// Ensure the user sees large reorgs
@@ -2103,23 +2102,37 @@ func (bc *BlockChain) UpdateM1() error {
 	return nil
 }
 
-func (bc *BlockChain) reorgTomox(blockhash common.Hash) error {
+func (bc *BlockChain) reorgTomox(block *types.Block) error {
 	var tomoXService *tomox.TomoX
 	engine, ok := bc.Engine().(*posv.Posv)
 	if ok {
 		tomoXService = engine.GetTomoXService()
 	}
-	if tomoXService == nil {
-		return tomox.ErrTomoXServiceNotFound
+	if tomoXService != nil {
+		if tomoXService.IsSDKNode() {
+			// SDK node doesn't run matching engine, nothing to do
+			return nil
+		}
+		number := block.NumberU64()
+		nearestSnapshotNumber := tomox.GetNearestSnapshotBlock(number)
+		snapshotBlock := bc.GetBlockByNumber(nearestSnapshotNumber)
+		if err := tomoXService.LoadSnapshot(snapshotBlock.Hash()); err != nil {
+			log.Error("Failed to load tomox snapshot", "err", err)
+			return err
+		}
+		if nearestSnapshotNumber == number {
+			return nil
+		}
+		i := nearestSnapshotNumber + 1
+		for i <= number {
+			block := bc.GetBlockByNumber(i)
+			if err := tomoXService.ApplyDryrunCache(block.Hash()); err != nil {
+				return err
+			}
+			i++
+		}
 	}
-	if tomoXService.IsSDKNode() {
-		// SDK node doesn't run matching engine, nothing to do
-		return nil
-	}
-	if err := tomoXService.LoadSnapshot(blockhash); err != nil {
-		log.Error("Failed to load tomox snapshot", "err", err)
-		return err
-	}
+
 	return nil
 }
 
