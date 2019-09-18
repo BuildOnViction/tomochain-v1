@@ -54,6 +54,8 @@ const (
 	pendingCancelPrefix  = "XPCANCEL"
 	orderProcessedLimit  = 1000
 	orderProcessLimit    = 20
+	SnapshotInterval     = 1 // 1 block
+
 )
 
 type Config struct {
@@ -190,12 +192,6 @@ func New(cfg *Config) *TomoX {
 			}
 		},
 	}
-	if !tomoX.sdkNode {
-		if err := tomoX.loadSnapshot(common.Hash{}); err != nil {
-			log.Error("Failed to load tomox snapshot", "err", err)
-		}
-	}
-
 	return tomoX
 }
 
@@ -1202,7 +1198,7 @@ func (tomox *TomoX) Snapshot(blockHash common.Hash) error {
 	return nil
 }
 
-func (tomox *TomoX) loadSnapshot(hash common.Hash) error {
+func (tomox *TomoX) LoadSnapshot(hash common.Hash) error {
 	// load orderbook from snapshot
 	var (
 		snap *Snapshot
