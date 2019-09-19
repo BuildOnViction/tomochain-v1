@@ -91,6 +91,13 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 
 	// clear the previous dry-run cache
 	if tomoXService != nil {
+		head := v.bc.CurrentBlock()
+		if block.NumberU64() == head.NumberU64() && block.ParentHash() == head.ParentHash() {
+			// parent is splitting point, try to rollback tomox to parent
+			if err := v.bc.reorgTomox(block); err != nil {
+				return err
+			}
+		}
 		tomoXService.GetDB().InitDryRunMode(hashNoValidator)
 	}
 	txMatchBatchData, err := ExtractMatchingTransactions(block.Transactions())
