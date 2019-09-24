@@ -94,7 +94,7 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 		head := v.bc.CurrentBlock()
 		if block.NumberU64() == head.NumberU64() && block.ParentHash() == head.ParentHash() {
 			// parent is splitting point, try to rollback tomox to parent
-			if err := v.bc.reorgTomox(block); err != nil {
+			if err := v.bc.reorgTomox(block, []*types.Block{head}, []*types.Block{block}); err != nil {
 				return err
 			}
 		}

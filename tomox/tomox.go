@@ -1286,6 +1286,7 @@ func (tomox *TomoX) SyncDataToSDKNode(txDataMatch TxDataMatch, txHash common.Has
 	if order.Status != OrderStatusCancelled {
 		order.Status = OrderStatusOpen
 	}
+	order.TxHash = txHash
 
 	log.Debug("Put processed order", "order", order)
 	if err := db.Put(order.Hash.Bytes(), order, false, common.Hash{}); err != nil {

@@ -43,6 +43,7 @@ type OrderItem struct {
 	Side            string         `json:"side,omitempty"`
 	Type            string         `json:"type,omitempty"`
 	Hash            common.Hash    `json:"hash,omitempty"`
+	TxHash          common.Hash    `json:"txHash,omitempty"`
 	Signature       *Signature     `json:"signature,omitempty"`
 	FilledAmount    *big.Int       `json:"filledAmount,omitempty"`
 	Nonce           *big.Int       `json:"nonce,omitempty"`
@@ -68,6 +69,7 @@ type OrderItemBSON struct {
 	Side            string           `json:"side,omitempty" bson:"side"`
 	Type            string           `json:"type,omitempty" bson:"type"`
 	Hash            string           `json:"hash,omitempty" bson:"hash"`
+	TxHash          string           `json:"txHash,omitempty" bson:"txHash"`
 	Signature       *SignatureRecord `json:"signature,omitempty" bson:"signature"`
 	FilledAmount    string           `json:"filledAmount,omitempty" bson:"filledAmount"`
 	Nonce           string           `json:"nonce,omitempty" bson:"nonce"`

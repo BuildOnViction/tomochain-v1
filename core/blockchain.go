@@ -1761,10 +1761,6 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 		}
 	}
 
-	// reorgTomoX from snapshot
-	if err := bc.reorgTomox(commonBlock); err != nil {
-		return err
-	}
 	// Ensure the user sees large reorgs
 	if len(oldChain) > 0 && len(newChain) > 0 {
 		logFn := log.Debug
@@ -1793,6 +1789,10 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 	// receipts that were created in the fork must also be deleted
 	for _, tx := range diff {
 		DeleteTxLookupEntry(bc.db, tx.Hash())
+	}
+	// reorgTomoX from snapshot
+	if err := bc.reorgTomox(commonBlock, oldChain, newChain); err != nil {
+		return err
 	}
 	if len(deletedLogs) > 0 {
 		go bc.rmLogsFeed.Send(RemovedLogsEvent{deletedLogs})
@@ -2102,17 +2102,18 @@ func (bc *BlockChain) UpdateM1() error {
 	return nil
 }
 
-func (bc *BlockChain) reorgTomox(block *types.Block) error {
+func (bc *BlockChain) reorgTomox(block *types.Block, oldChain, newChain types.Blocks ) error {
 	var tomoXService *tomox.TomoX
 	engine, ok := bc.Engine().(*posv.Posv)
 	if ok {
 		tomoXService = engine.GetTomoXService()
 	}
-	if tomoXService != nil {
-		if tomoXService.IsSDKNode() {
-			// SDK node doesn't run matching engine, nothing to do
-			return nil
-		}
+	if tomoXService == nil {
+		return nil
+	}
+	// For masternode:
+	if !tomoXService.IsSDKNode() {
+		// rollback snapshot to commonBlock
 		number := block.NumberU64()
 		nearestSnapshotNumber := tomox.GetNearestSnapshotBlock(number)
 		snapshotBlock := bc.GetBlockByNumber(nearestSnapshotNumber)
@@ -2131,8 +2132,55 @@ func (bc *BlockChain) reorgTomox(block *types.Block) error {
 			}
 			i++
 		}
+
+		// Apply new chain
+		for _, newBlock := range newChain {
+			//if err := bc.validator.ValidateBody(newBlock); err != nil {
+			//	return err
+			//}
+			txMatchBatchData, err := ExtractMatchingTransactions(block.Transactions())
+			if err != nil {
+				return err
+			}
+			processedOrders, err := getProcessedOrders(txMatchBatchData)
+			log.Debug("Reorg: Applying TxMatches of block", "number", block.NumberU64(), "hash", block.Hash(), "hash_novalidator", block.HashNoValidator())
+			if err:= tomoXService.ApplyTxMatches(processedOrders, newBlock.HashNoValidator()); err != nil {
+				return nil
+			}
+		}
+		return nil
 	}
 
+	// For SDK node: reorg SDK orders, trades
+
+	// delete txMatches of old chain
+	for _, oldBlock := range oldChain {
+		for _, deletedTxMatch := range oldBlock.Transactions() {
+			if deletedTxMatch.IsMatchingTransaction() {
+				if err := tomoXService.GetDB().DeleteTxMatchByTxHash(deletedTxMatch.Hash()); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	// add txMatches of new chain
+	for _, newBlock := range newChain {
+		for _, addedTxMatch := range newBlock.Transactions() {
+			if addedTxMatch.IsMatchingTransaction() {
+				currentState, err := bc.State()
+				if err != nil {
+					return err
+				}
+				txMatchBatchData, err := ExtractMatchingTransactions(block.Transactions())
+				if err != nil {
+					return err
+				}
+				if err := logDataToSdkNode(tomoXService, txMatchBatchData, currentState); err != nil {
+					return err
+				}
+			}
+		}
+	}
 	return nil
 }
 
