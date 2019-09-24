@@ -2102,7 +2102,7 @@ func (bc *BlockChain) UpdateM1() error {
 	return nil
 }
 
-func (bc *BlockChain) reorgTomox(block *types.Block, oldChain, newChain types.Blocks ) error {
+func (bc *BlockChain) reorgTomox(block *types.Block, oldChain, newChain types.Blocks) error {
 	var tomoXService *tomox.TomoX
 	engine, ok := bc.Engine().(*posv.Posv)
 	if ok {
@@ -2121,9 +2121,7 @@ func (bc *BlockChain) reorgTomox(block *types.Block, oldChain, newChain types.Bl
 			log.Error("Failed to load tomox snapshot", "err", err)
 			return err
 		}
-		if nearestSnapshotNumber == number {
-			return nil
-		}
+		log.Debug("Reorg tomox: successfully loaded tomox snapshot at block", "number", nearestSnapshotNumber, "hash", snapshotBlock.Hash())
 		i := nearestSnapshotNumber + 1
 		for i <= number {
 			block := bc.GetBlockByNumber(i)
@@ -2132,7 +2130,7 @@ func (bc *BlockChain) reorgTomox(block *types.Block, oldChain, newChain types.Bl
 			}
 			i++
 		}
-
+		log.Debug("Rollback tomox to commonBlock", "number", block.NumberU64())
 		// Apply new chain
 		for _, newBlock := range newChain {
 			//if err := bc.validator.ValidateBody(newBlock); err != nil {
@@ -2143,10 +2141,13 @@ func (bc *BlockChain) reorgTomox(block *types.Block, oldChain, newChain types.Bl
 				return err
 			}
 			processedOrders, err := getProcessedOrders(txMatchBatchData)
-			log.Debug("Reorg: Applying TxMatches of block", "number", block.NumberU64(), "hash", block.Hash(), "hash_novalidator", block.HashNoValidator())
-			if err:= tomoXService.ApplyTxMatches(processedOrders, newBlock.HashNoValidator()); err != nil {
-				return nil
+			if len(processedOrders) > 0 {
+				log.Debug("Reorg: Applying TxMatches of block", "number", block.NumberU64(), "hash", block.Hash(), "hash_novalidator", block.HashNoValidator())
+				if err := tomoXService.ApplyTxMatches(processedOrders, newBlock.HashNoValidator()); err != nil {
+					return nil
+				}
 			}
+
 		}
 		return nil
 	}
@@ -2157,6 +2158,7 @@ func (bc *BlockChain) reorgTomox(block *types.Block, oldChain, newChain types.Bl
 	for _, oldBlock := range oldChain {
 		for _, deletedTxMatch := range oldBlock.Transactions() {
 			if deletedTxMatch.IsMatchingTransaction() {
+				log.Debug("Reorg: DeleteTxMatchByTxHash", "txhash", deletedTxMatch.Hash())
 				if err := tomoXService.GetDB().DeleteTxMatchByTxHash(deletedTxMatch.Hash()); err != nil {
 					return err
 				}
@@ -2175,6 +2177,7 @@ func (bc *BlockChain) reorgTomox(block *types.Block, oldChain, newChain types.Bl
 				if err != nil {
 					return err
 				}
+				log.Debug("Reorg: logDataToSdkNode", "txhash", addedTxMatch.Hash())
 				if err := logDataToSdkNode(tomoXService, txMatchBatchData, currentState); err != nil {
 					return err
 				}

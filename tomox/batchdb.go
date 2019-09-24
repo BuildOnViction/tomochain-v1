@@ -144,7 +144,7 @@ func (db *BatchDatabase) Put(key []byte, val interface{}, dryrun bool, blockHash
 		db.lock.Lock()
 		dryrunCache, ok := db.dryRunCaches[blockHash]
 		db.lock.Unlock()
-		if !ok  {
+		if !ok {
 			log.Debug("BatchDB - Put: DryrunCache of this block is not initialized. Initialize now!", "blockHash", blockHash)
 			db.InitDryRunMode(blockHash)
 			dryrunCache, _ = db.dryRunCaches[blockHash]
@@ -171,7 +171,7 @@ func (db *BatchDatabase) Delete(key []byte, dryrun bool, blockHash common.Hash) 
 		db.lock.Lock()
 		dryrunCache, ok := db.dryRunCaches[blockHash]
 		db.lock.Unlock()
-		if !ok  {
+		if !ok {
 			log.Debug("BatchDB - Delete: DryrunCache of this block is not initialized. Initialize now!", "blockHash", blockHash)
 			db.InitDryRunMode(blockHash)
 			dryrunCache, _ = db.dryRunCaches[blockHash]
