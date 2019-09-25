@@ -79,7 +79,7 @@ func NewOrderListWithItem(item *OrderListItem, orderTree *OrderTree) *OrderList 
 
 func (orderList *OrderList) GetOrder(key []byte, dryrun bool, blockHash common.Hash) *Order {
 	storedKey := orderList.GetOrderIDFromKey(key)
-	log.Debug("Get order from key", "storedKey", hex.EncodeToString(storedKey))
+	//log.Debug("Get order from key", "storedKey", hex.EncodeToString(storedKey))
 	return orderList.orderTree.orderBook.GetOrder(storedKey, key, dryrun, blockHash)
 }
 

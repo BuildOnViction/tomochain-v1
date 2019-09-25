@@ -283,6 +283,7 @@ func ApplySignTransaction(config *params.ChainConfig, statedb *state.StateDB, he
 }
 
 func ApplyTomoXMatchedTransaction(config *params.ChainConfig, bc *BlockChain, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64) (*types.Receipt, uint64, error, bool) {
+	log.Debug("ApplyTomoXMatchedTransaction")
 	// Update the state with pending changes
 	from, err := types.Sender(types.MakeSigner(config, header.Number), tx)
 	if err != nil {
@@ -319,7 +320,7 @@ func ApplyTomoXMatchedTransaction(config *params.ChainConfig, bc *BlockChain, st
 			makerExfee := tomox.GetExRelayerFee(makerExAddr, statedb)
 			makerExOwner := tomox.GetRelayerOwner(makerExAddr, statedb)
 			makerAddr := common.HexToAddress(txMatch.Trades[i][tomox.TradeMaker])
-			log.Debug("ApplyTomoXMatchedTransaction : trades quantityString", "i", i, "trade", txMatch.Trades[i], "price", price)
+			//log.Debug("ApplyTomoXMatchedTransaction : trades quantityString", "i", i, "trade", txMatch.Trades[i], "price", price)
 			if makerExAddr != (common.Address{}) && makerAddr != (common.Address{}) {
 				// take relayer fee
 				err := tomox.SubRelayerFee(takerExAddr, common.RelayerFee, statedb)
