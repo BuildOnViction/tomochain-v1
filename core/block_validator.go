@@ -93,7 +93,8 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 	if tomoXService != nil {
 		head := v.bc.CurrentBlock()
 		if block.NumberU64() <= head.NumberU64() {
-			if err := v.bc.reorgTomox(v.bc.GetBlockByNumber(head.NumberU64() - 1), []*types.Block{}, []*types.Block{}); err != nil {
+			if err := v.bc.LoadTomoxStateAtBlock(
+				block.NumberU64() - 1); err != nil {
 				return err
 			}
 		}
@@ -155,7 +156,7 @@ func (v *BlockValidator) validateMatchingOrder(tomoXService *tomox.TomoX, curren
 		if err != nil {
 			return fmt.Errorf("transaction match is corrupted. Failed decode order. Error: %s ", err)
 		}
-		if order.Status != tomox.OrderStatusCancelled && tomoXService.ExistProcessedOrderHash(order.Hash) {
+		if order.Status != tomox.OrderStatusCancelled && tomoXService.ExistProcessedOrderHash(order.Hash, blockHash) {
 			log.Debug("This order has been processed", "hash", hex.EncodeToString(order.Hash.Bytes()))
 			continue
 		}

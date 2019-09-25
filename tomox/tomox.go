@@ -1103,8 +1103,8 @@ func (tomox *TomoX) getPendingOrders() []OrderPending {
 	return pendingOrders
 }
 
-func (tomox *TomoX) addProcessedOrderHash(orderHash common.Hash, cancel bool) error {
-	if !tomox.processedOrderCache.Add(orderHash, true) {
+func (tomox *TomoX) addProcessedOrderHash(orderHash common.Hash, cancel bool, blockhash common.Hash) error {
+	if !tomox.processedOrderCache.Add(orderHash, blockhash) {
 		// remove order from pending list
 		if err := tomox.RemoveOrderFromPending(orderHash, cancel); err != nil {
 			log.Warn("Double check pending order at addProcessedOrderHash. Failed to remove pending hash", "err", err, "orderHash", orderHash)
@@ -1120,8 +1120,15 @@ func (tomox *TomoX) addProcessedOrderHash(orderHash common.Hash, cancel bool) er
 	}
 }
 
-func (tomox *TomoX) ExistProcessedOrderHash(orderHash common.Hash) bool {
-	return tomox.processedOrderCache.Contains(orderHash)
+func (tomox *TomoX) ExistProcessedOrderHash(orderHash common.Hash, blockhash common.Hash) bool {
+	if blockhash == (common.Hash{}) {
+		return tomox.processedOrderCache.Contains(orderHash)
+	}
+	bh, ok := tomox.processedOrderCache.Get(orderHash)
+	if ok && bh == blockhash {
+		return  true
+	}
+	return false
 }
 
 func (tomox *TomoX) updatePairs(pairs map[string]bool) error {
@@ -1247,7 +1254,7 @@ func (tomox *TomoX) ApplyTxMatches(orders []*OrderItem, blockHash common.Hash) e
 	}
 
 	for _, order := range orders {
-		if err := tomox.addProcessedOrderHash(order.Hash, order.Status == OrderStatusCancelled); err != nil {
+		if err := tomox.addProcessedOrderHash(order.Hash, order.Status == OrderStatusCancelled, blockHash); err != nil {
 			log.Error("Failed to mark order as processed", "err", err)
 		}
 		log.Debug("Mark order as processed", "orderHash", hex.EncodeToString(order.Hash.Bytes()))

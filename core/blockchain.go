@@ -2114,35 +2114,18 @@ func (bc *BlockChain) reorgTomox(block *types.Block, oldChain, newChain types.Bl
 	// For masternode:
 	if !tomoXService.IsSDKNode() {
 		// rollback snapshot to commonBlock
-		number := block.NumberU64()
-		nearestSnapshotNumber := tomox.GetNearestSnapshotBlock(number)
-		snapshotBlock := bc.GetBlockByNumber(nearestSnapshotNumber)
-		if err := tomoXService.LoadSnapshot(snapshotBlock.Hash()); err != nil {
-			log.Error("Failed to load tomox snapshot", "err", err)
+		if err := bc.LoadTomoxStateAtBlock(block.NumberU64()); err != nil {
 			return err
 		}
-		log.Debug("Reorg tomox: successfully loaded tomox snapshot at block", "number", nearestSnapshotNumber, "hash", snapshotBlock.Hash())
-		i := nearestSnapshotNumber + 1
-		for i <= number {
-			block := bc.GetBlockByNumber(i)
-			if err := tomoXService.ApplyDryrunCache(block.Hash()); err != nil {
-				return err
-			}
-			i++
-		}
-		log.Debug("Rollback tomox to commonBlock", "number", block.NumberU64())
 		// Apply new chain
 		for _, newBlock := range newChain {
-			//if err := bc.validator.ValidateBody(newBlock); err != nil {
-			//	return err
-			//}
-			txMatchBatchData, err := ExtractMatchingTransactions(block.Transactions())
+			txMatchBatchData, err := ExtractMatchingTransactions(newBlock.Transactions())
 			if err != nil {
 				return err
 			}
 			processedOrders, err := getProcessedOrders(txMatchBatchData)
 			if len(processedOrders) > 0 {
-				log.Debug("Reorg: Applying TxMatches of block", "number", block.NumberU64(), "hash", block.Hash(), "hash_novalidator", block.HashNoValidator())
+				log.Debug("Reorg: Applying TxMatches of block", "number", newBlock.NumberU64(), "hash", newBlock.Hash(), "hash_novalidator", newBlock.HashNoValidator())
 				if err := tomoXService.ApplyTxMatches(processedOrders, newBlock.HashNoValidator()); err != nil {
 					return nil
 				}
@@ -2184,6 +2167,34 @@ func (bc *BlockChain) reorgTomox(block *types.Block, oldChain, newChain types.Bl
 			}
 		}
 	}
+	return nil
+}
+
+func (bc *BlockChain) LoadTomoxStateAtBlock(number uint64) error {
+	var tomoXService *tomox.TomoX
+	engine, ok := bc.Engine().(*posv.Posv)
+	if ok {
+		tomoXService = engine.GetTomoXService()
+	}
+	if tomoXService == nil {
+		return nil
+	}
+	nearestSnapshotNumber := tomox.GetNearestSnapshotBlock(number)
+	snapshotBlock := bc.GetBlockByNumber(nearestSnapshotNumber)
+	if err := tomoXService.LoadSnapshot(snapshotBlock.Hash()); err != nil {
+		log.Error("Failed to load tomox snapshot", "err", err)
+		return err
+	}
+	log.Debug("Tomox states rollback: successfully loaded tomox snapshot at block", "number", nearestSnapshotNumber, "hash", snapshotBlock.Hash())
+	i := nearestSnapshotNumber + 1
+	for i <= number {
+		block := bc.GetBlockByNumber(i)
+		if err := tomoXService.ApplyDryrunCache(block.Hash()); err != nil {
+			return err
+		}
+		i++
+	}
+	log.Debug("Rollback tomox states to block", "number", number)
 	return nil
 }
 
