@@ -1310,38 +1310,6 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 			// Only count canonical blocks for GC processing time
 			bc.gcproc += proctime
 			bc.UpdateBlocksHashCache(block)
-			txMatchBatchData, err := ExtractMatchingTransactions(block.Transactions())
-			if err != nil {
-				return i, events, coalescedLogs, err
-			}
-
-			processedOrders, err := getProcessedOrders(txMatchBatchData)
-			if err != nil {
-				return i, events, coalescedLogs, err
-			}
-			if tomoXService != nil {
-				if len(processedOrders) > 0 {
-					log.Debug("Applying TxMatches of block", "number", block.NumberU64(), "hash", block.Hash(), "hash_novalidator", block.HashNoValidator())
-					if err = tomoXService.ApplyTxMatches(processedOrders, block.HashNoValidator()); err != nil {
-						return i, events, coalescedLogs, err
-					}
-					if tomoXService.IsSDKNode() {
-						currentState, err := bc.State()
-						if err != nil {
-							return i, events, coalescedLogs, err
-						}
-						if err := logDataToSdkNode(tomoXService, txMatchBatchData, currentState); err != nil {
-							return i, events, coalescedLogs, err
-						}
-					}
-				}
-				if bc.CurrentHeader().Number.Uint64()%tomox.SnapshotInterval == 0 && !tomoXService.IsSDKNode() {
-					if err := tomoXService.Snapshot(block.Hash()); err != nil {
-						log.Error("Failed to snapshot tomox", "err", err)
-					}
-				}
-			}
-
 		case SideStatTy:
 			log.Debug("Inserted forked block from downloader", "number", block.Number(), "hash", block.Hash(), "diff", block.Difficulty(), "elapsed",
 				common.PrettyDuration(time.Since(bstart)), "txs", len(block.Transactions()), "gas", block.GasUsed(), "uncles", len(block.Uncles()))
@@ -1350,6 +1318,41 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 			events = append(events, ChainSideEvent{block})
 			bc.UpdateBlocksHashCache(block)
 		}
+		txMatchBatchData, err := ExtractMatchingTransactions(block.Transactions())
+		if err != nil {
+			return i, events, coalescedLogs, err
+		}
+
+		processedOrders, err := getProcessedOrders(txMatchBatchData)
+		if err != nil {
+			return i, events, coalescedLogs, err
+		}
+		if tomoXService != nil {
+			if len(processedOrders) > 0 {
+				if bc.CurrentBlock().NumberU64() <= block.NumberU64() {
+					bc.LoadTomoxStateAtBlock(block.NumberU64() - 1)
+				}
+				log.Debug("Applying TxMatches of block", "number", block.NumberU64(), "hash", block.Hash(), "hash_novalidator", block.HashNoValidator())
+				if err = tomoXService.ApplyTxMatches(processedOrders, block.HashNoValidator()); err != nil {
+					return i, events, coalescedLogs, err
+				}
+				if tomoXService.IsSDKNode() {
+					currentState, err := bc.State()
+					if err != nil {
+						return i, events, coalescedLogs, err
+					}
+					if err := logDataToSdkNode(tomoXService, txMatchBatchData, currentState); err != nil {
+						return i, events, coalescedLogs, err
+					}
+				}
+			}
+			if bc.CurrentHeader().Number.Uint64()%tomox.SnapshotInterval == 0 && !tomoXService.IsSDKNode() {
+				if err := tomoXService.Snapshot(block.Hash()); err != nil {
+					log.Error("Failed to snapshot tomox", "err", err)
+				}
+			}
+		}
+
 		stats.processed++
 		stats.usedGas += usedGas
 		stats.report(chain, i, bc.stateCache.TrieDB().Size())
@@ -1567,47 +1570,6 @@ func (bc *BlockChain) insertBlock(block *types.Block) ([]interface{}, []*types.L
 		bc.gcproc += result.proctime
 
 		bc.UpdateBlocksHashCache(block)
-		var tomoXService *tomox.TomoX
-		engine, ok := bc.Engine().(*posv.Posv)
-		if ok {
-			tomoXService = engine.GetTomoXService()
-		}
-
-		txMatchBatchData, err := ExtractMatchingTransactions(block.Transactions())
-		if err != nil {
-			return events, coalescedLogs, err
-		}
-
-		processedOrders, err := getProcessedOrders(txMatchBatchData)
-		if err != nil {
-			return events, coalescedLogs, err
-		}
-		if tomoXService != nil {
-			if len(processedOrders) > 0 {
-				log.Debug("Applying TxMatches of block", "number", block.NumberU64(), "hash", block.Hash(), "hash_novalidator", block.HashNoValidator())
-				if err = tomoXService.ApplyTxMatches(processedOrders, block.HashNoValidator()); err != nil {
-					return events, coalescedLogs, err
-				}
-				if tomoXService.IsSDKNode() {
-					currentState, err := bc.State()
-					if err != nil {
-						return events, coalescedLogs, err
-					}
-					txMatchBatchData, err := ExtractMatchingTransactions(block.Transactions())
-					if err != nil {
-						return events, coalescedLogs, err
-					}
-					if err := logDataToSdkNode(tomoXService, txMatchBatchData, currentState); err != nil {
-						return events, coalescedLogs, err
-					}
-				}
-			}
-			if bc.CurrentHeader().Number.Uint64()%tomox.SnapshotInterval == 0 && !tomoXService.IsSDKNode() {
-				if err := tomoXService.Snapshot(block.Hash()); err != nil {
-					log.Error("Failed to snapshot tomox", "err", err)
-				}
-			}
-		}
 
 	case SideStatTy:
 		log.Debug("Inserted forked block from fetcher", "number", block.Number(), "hash", block.Hash(), "diff", block.Difficulty(), "elapsed",
@@ -1617,6 +1579,50 @@ func (bc *BlockChain) insertBlock(block *types.Block) ([]interface{}, []*types.L
 		events = append(events, ChainSideEvent{block})
 
 		bc.UpdateBlocksHashCache(block)
+	}
+	var tomoXService *tomox.TomoX
+	engine, ok := bc.Engine().(*posv.Posv)
+	if ok {
+		tomoXService = engine.GetTomoXService()
+	}
+
+	txMatchBatchData, err := ExtractMatchingTransactions(block.Transactions())
+	if err != nil {
+		return events, coalescedLogs, err
+	}
+
+	processedOrders, err := getProcessedOrders(txMatchBatchData)
+	if err != nil {
+		return events, coalescedLogs, err
+	}
+	if tomoXService != nil {
+		if len(processedOrders) > 0 {
+			log.Debug("Applying TxMatches of block", "number", block.NumberU64(), "hash", block.Hash(), "hash_novalidator", block.HashNoValidator())
+			if bc.CurrentBlock().NumberU64() <= block.NumberU64() {
+				bc.LoadTomoxStateAtBlock(block.NumberU64() - 1)
+			}
+			if err = tomoXService.ApplyTxMatches(processedOrders, block.HashNoValidator()); err != nil {
+				return events, coalescedLogs, err
+			}
+			if tomoXService.IsSDKNode() {
+				currentState, err := bc.State()
+				if err != nil {
+					return events, coalescedLogs, err
+				}
+				txMatchBatchData, err := ExtractMatchingTransactions(block.Transactions())
+				if err != nil {
+					return events, coalescedLogs, err
+				}
+				if err := logDataToSdkNode(tomoXService, txMatchBatchData, currentState); err != nil {
+					return events, coalescedLogs, err
+				}
+			}
+		}
+		if bc.CurrentHeader().Number.Uint64()%tomox.SnapshotInterval == 0 && !tomoXService.IsSDKNode() {
+			if err := tomoXService.Snapshot(block.Hash()); err != nil {
+				log.Error("Failed to snapshot tomox", "err", err)
+			}
+		}
 	}
 	stats.processed++
 	stats.usedGas += result.usedGas
