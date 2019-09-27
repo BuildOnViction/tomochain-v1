@@ -2133,7 +2133,8 @@ func (bc *BlockChain) reorgTomox(block *types.Block, oldChain, newChain types.Bl
 			if len(processedOrders) > 0 {
 				log.Debug("Reorg: Applying TxMatches of block", "number", newBlock.NumberU64(), "hash", newBlock.Hash(), "hash_novalidator", newBlock.HashNoValidator())
 				if err := tomoXService.ApplyTxMatches(processedOrders, newBlock.HashNoValidator()); err != nil {
-					return nil
+					return fmt.Errorf("reorg: Error when applying TxMatches of block. Number: %v. Hash: %s. HashNoValidator: %s. Error: %v",
+						newBlock.NumberU64(), newBlock.Hash().Hex(), newBlock.HashNoValidator().Hex(), err)
 				}
 			}
 
@@ -2147,9 +2148,8 @@ func (bc *BlockChain) reorgTomox(block *types.Block, oldChain, newChain types.Bl
 	for _, oldBlock := range oldChain {
 		for _, deletedTxMatch := range oldBlock.Transactions() {
 			if deletedTxMatch.IsMatchingTransaction() {
-				log.Debug("Reorg: DeleteTxMatchByTxHash", "txhash", deletedTxMatch.Hash())
 				if err := tomoXService.GetDB().DeleteTxMatchByTxHash(deletedTxMatch.Hash()); err != nil {
-					return err
+					return fmt.Errorf("reorg: DeleteTxMatchByTxHash. TxHash: %s . Error: %v", deletedTxMatch.Hash().Hex(), err)
 				}
 			}
 		}
@@ -2166,9 +2166,8 @@ func (bc *BlockChain) reorgTomox(block *types.Block, oldChain, newChain types.Bl
 				if err != nil {
 					return err
 				}
-				log.Debug("Reorg: logDataToSdkNode", "txhash", addedTxMatch.Hash())
 				if err := logDataToSdkNode(tomoXService, txMatchBatchData, currentState); err != nil {
-					return err
+					return fmt.Errorf("reorg: logDataToSdkNode. TxHash: %s . Error: %v", addedTxMatch.Hash().Hex(), err)
 				}
 			}
 		}
@@ -2188,8 +2187,7 @@ func (bc *BlockChain) LoadTomoxStateAtBlock(number uint64) error {
 	nearestSnapshotNumber := tomox.GetNearestSnapshotBlock(number)
 	snapshotBlock := bc.GetBlockByNumber(nearestSnapshotNumber)
 	if err := tomoXService.LoadSnapshot(snapshotBlock.Hash()); err != nil {
-		log.Error("Failed to load tomox snapshot", "err", err)
-		return err
+		return fmt.Errorf("loadTomoxStateAtBlock: failed to load tomox snapshot. Error: %v", err)
 	}
 	log.Debug("Tomox states rollback: successfully loaded tomox snapshot at block", "number", nearestSnapshotNumber, "hash", snapshotBlock.Hash())
 	i := nearestSnapshotNumber + 1
@@ -2210,8 +2208,7 @@ func getProcessedOrders(txMatchBatchData []tomox.TxMatchBatch) ([]*tomox.OrderIt
 		for _, txMatch := range txMatchBatch.Data {
 			order, err := txMatch.DecodeOrder()
 			if err != nil {
-				log.Error("Decode order failed", "txMatch", txMatch)
-				return []*tomox.OrderItem{}, fmt.Errorf("decode order failed")
+				return []*tomox.OrderItem{}, fmt.Errorf("decode order failed. TxMatch: %v . Error: %v", txMatch, err)
 			}
 			orders = append(orders, order)
 		}
