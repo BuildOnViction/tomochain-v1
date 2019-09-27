@@ -312,12 +312,5 @@ func (db *MongoDatabase) DeleteTxMatchByTxHash(txhash common.Hash) error {
 		log.Error("Error when deleting order in DeleteTxMatchByTxHash", "error", err)
 		return err
 	}
-
-	err = sc.DB(db.dbName).C(collectionNameTrades).Remove(query)
-	if err != nil && err != mgo.ErrNotFound {
-		log.Error("Error when deleting trade in DeleteTxMatchByTxHash", "error", err)
-		return err
-	}
-
 	return nil
 }
