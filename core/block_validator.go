@@ -92,9 +92,8 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 	// clear the previous dry-run cache
 	if tomoXService != nil {
 		head := v.bc.CurrentBlock()
-		if block.NumberU64() <= head.NumberU64() {
-			if err := v.bc.LoadTomoxStateAtBlock(
-				block.NumberU64() - 1); err != nil {
+		if block.ParentHash() != head.Hash() {
+			if err := v.bc.LoadTomoxStateAtBlock(block.ParentHash()); err != nil {
 				return err
 			}
 		}

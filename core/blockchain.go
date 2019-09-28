@@ -1329,8 +1329,11 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 		}
 		if tomoXService != nil {
 			if len(processedOrders) > 0 {
-				if bc.CurrentBlock().NumberU64() <= block.NumberU64() {
-					bc.LoadTomoxStateAtBlock(block.NumberU64() - 1)
+				// not canonical chain
+				if bc.CurrentBlock().Hash() != block.Hash() {
+					if err := bc.LoadTomoxStateAtBlock(block.ParentHash()); err != nil {
+						return i, events, coalescedLogs, err
+					}
 				}
 				log.Debug("Applying TxMatches of block", "number", block.NumberU64(), "hash", block.Hash(), "hash_novalidator", block.HashNoValidator())
 				if err = tomoXService.ApplyTxMatches(processedOrders, block.HashNoValidator()); err != nil {
@@ -1598,8 +1601,10 @@ func (bc *BlockChain) insertBlock(block *types.Block) ([]interface{}, []*types.L
 	if tomoXService != nil {
 		if len(processedOrders) > 0 {
 			log.Debug("Applying TxMatches of block", "number", block.NumberU64(), "hash", block.Hash(), "hash_novalidator", block.HashNoValidator())
-			if bc.CurrentBlock().NumberU64() <= block.NumberU64() {
-				bc.LoadTomoxStateAtBlock(block.NumberU64() - 1)
+			if bc.CurrentBlock().Hash() != block.Hash() {
+				if err := bc.LoadTomoxStateAtBlock(block.ParentHash()); err != nil {
+					return events, coalescedLogs, err
+				}
 			}
 			if err = tomoXService.ApplyTxMatches(processedOrders, block.HashNoValidator()); err != nil {
 				return events, coalescedLogs, err
@@ -2120,7 +2125,7 @@ func (bc *BlockChain) reorgTomox(block *types.Block, oldChain, newChain types.Bl
 	// For masternode:
 	if !tomoXService.IsSDKNode() {
 		// rollback snapshot to commonBlock
-		if err := bc.LoadTomoxStateAtBlock(block.NumberU64()); err != nil {
+		if err := bc.LoadTomoxStateAtBlock(block.Hash()); err != nil {
 			return err
 		}
 		// Apply new chain
@@ -2175,7 +2180,7 @@ func (bc *BlockChain) reorgTomox(block *types.Block, oldChain, newChain types.Bl
 	return nil
 }
 
-func (bc *BlockChain) LoadTomoxStateAtBlock(number uint64) error {
+func (bc *BlockChain) LoadTomoxStateAtBlock(blockhash common.Hash) error {
 	var tomoXService *tomox.TomoX
 	engine, ok := bc.Engine().(*posv.Posv)
 	if ok {
@@ -2184,21 +2189,32 @@ func (bc *BlockChain) LoadTomoxStateAtBlock(number uint64) error {
 	if tomoXService == nil {
 		return nil
 	}
-	nearestSnapshotNumber := tomox.GetNearestSnapshotBlock(number)
-	snapshotBlock := bc.GetBlockByNumber(nearestSnapshotNumber)
-	if err := tomoXService.LoadSnapshot(snapshotBlock.Hash()); err != nil {
+	gapChain := types.Blocks{}
+	b := bc.GetBlockByHash(blockhash)
+	if b == nil {
+		return nil
+	}
+	for b.NumberU64()%tomox.SnapshotInterval != 0 {
+		gapChain = append(gapChain, b)
+		b = bc.GetBlockByHash(b.ParentHash())
+		if b == nil {
+			break
+		}
+	}
+	if err := tomoXService.LoadSnapshot(b.Hash()); err != nil {
 		return fmt.Errorf("loadTomoxStateAtBlock: failed to load tomox snapshot. Error: %v", err)
 	}
-	log.Debug("Tomox states rollback: successfully loaded tomox snapshot at block", "number", nearestSnapshotNumber, "hash", snapshotBlock.Hash())
-	i := nearestSnapshotNumber + 1
-	for i <= number {
-		block := bc.GetBlockByNumber(i)
-		if err := tomoXService.ApplyDryrunCache(block.Hash()); err != nil {
+	log.Debug("Tomox states rollback: successfully loaded tomox snapshot at block", "number", b.NumberU64(), "hash", b.Hash())
+	if len(gapChain) == 0 {
+		return nil
+	}
+	for i := len(gapChain) - 1; i >= 0; i-- {
+		b := gapChain[i]
+		log.Debug("Rollback tomox states to block", "number", b.NumberU64(), "hash", b.Hash())
+		if err := tomoXService.ApplyDryrunCache(b.Hash()); err != nil {
 			return err
 		}
-		i++
 	}
-	log.Debug("Rollback tomox states to block", "number", number)
 	return nil
 }
 
