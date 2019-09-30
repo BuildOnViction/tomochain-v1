@@ -216,7 +216,7 @@ func (db *MongoDatabase) Delete(key []byte, dryrun bool, blockHash common.Hash) 
 	return nil
 }
 
-func (db *MongoDatabase) InitDryRunMode(hash common.Hash) {
+func (db *MongoDatabase) InitDryRunMode(blockHashNoValidator, parentHashNoValidator common.Hash) {
 	// SDK node (which running with mongodb) doesn't run Matching engine
 	// dry-run cache is useless for sdk node
 }
@@ -301,6 +301,10 @@ func (db *MongoDatabase) CommitItem(cacheKey string, val interface{}) error {
 	return nil
 }
 
+func (db *MongoDatabase) HasDryrunCache(blockhash common.Hash) bool {
+	return false
+}
+
 func (db *MongoDatabase) DeleteTxMatchByTxHash(txhash common.Hash) error {
 	sc := db.Session.Copy()
 	defer sc.Close()
@@ -313,4 +317,8 @@ func (db *MongoDatabase) DeleteTxMatchByTxHash(txhash common.Hash) error {
 		return err
 	}
 	return nil
+}
+
+
+func (db *MongoDatabase) DropDryrunCache(blockhash common.Hash) {
 }

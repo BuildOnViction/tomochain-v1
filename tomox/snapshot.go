@@ -7,7 +7,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/log"
 )
 
 const (
@@ -281,13 +280,4 @@ func (s *Snapshot) RestoreOrderTree(treeSnap *OrderTreeSnapshot, tree *OrderTree
 		return tree, err
 	}
 	return tree, nil
-}
-
-func (tomox *TomoX) ApplyDryrunCache(blockHash common.Hash) error {
-	log.Debug("Apply dryrunCache to snapshot", "blockhash", blockHash)
-	if err := tomox.db.SaveDryRunResult(blockHash); err != nil {
-		log.Error("Failed to save dry-run result to snapshot", "err", err)
-		return err
-	}
-	return nil
 }

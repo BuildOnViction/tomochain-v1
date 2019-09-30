@@ -1329,12 +1329,6 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 		}
 		if tomoXService != nil {
 			if len(processedOrders) > 0 {
-				// not canonical chain
-				if bc.CurrentBlock().Hash() != block.Hash() {
-					if err := bc.LoadTomoxStateAtBlock(block.ParentHash()); err != nil {
-						return i, events, coalescedLogs, err
-					}
-				}
 				log.Debug("Applying TxMatches of block", "number", block.NumberU64(), "hash", block.Hash(), "hash_novalidator", block.HashNoValidator())
 				if err = tomoXService.ApplyTxMatches(processedOrders, block.HashNoValidator()); err != nil {
 					return i, events, coalescedLogs, err
@@ -1349,8 +1343,15 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 					}
 				}
 			}
-			if bc.CurrentHeader().Number.Uint64()%tomox.SnapshotInterval == 0 && !tomoXService.IsSDKNode() {
-				if err := tomoXService.Snapshot(block.Hash()); err != nil {
+			if block.NumberU64()%tomox.SnapshotInterval == 0 && !tomoXService.IsSDKNode() {
+				nearestDryrunCacheHash := bc.FindNearestDryrunCache(tomoXService, block)
+				log.Debug("From downloader: Periodically save dryruncache to DB", "nearestDryrunCacheHash", nearestDryrunCacheHash)
+				if status == CanonStatTy {
+					if err := tomoXService.SaveDryRunResult(nearestDryrunCacheHash); err != nil {
+						return i, events, coalescedLogs, err
+					}
+				}
+				if err := tomoXService.Snapshot(block); err != nil {
 					log.Error("Failed to snapshot tomox", "err", err)
 				}
 			}
@@ -1601,11 +1602,6 @@ func (bc *BlockChain) insertBlock(block *types.Block) ([]interface{}, []*types.L
 	if tomoXService != nil {
 		if len(processedOrders) > 0 {
 			log.Debug("Applying TxMatches of block", "number", block.NumberU64(), "hash", block.Hash(), "hash_novalidator", block.HashNoValidator())
-			if bc.CurrentBlock().Hash() != block.Hash() {
-				if err := bc.LoadTomoxStateAtBlock(block.ParentHash()); err != nil {
-					return events, coalescedLogs, err
-				}
-			}
 			if err = tomoXService.ApplyTxMatches(processedOrders, block.HashNoValidator()); err != nil {
 				return events, coalescedLogs, err
 			}
@@ -1623,8 +1619,15 @@ func (bc *BlockChain) insertBlock(block *types.Block) ([]interface{}, []*types.L
 				}
 			}
 		}
-		if bc.CurrentHeader().Number.Uint64()%tomox.SnapshotInterval == 0 && !tomoXService.IsSDKNode() {
-			if err := tomoXService.Snapshot(block.Hash()); err != nil {
+		if block.NumberU64()%tomox.SnapshotInterval == 0 && !tomoXService.IsSDKNode() {
+			nearestDryrunCacheHash := bc.FindNearestDryrunCache(tomoXService, block)
+			log.Debug("From fetcher: Periodically save dryruncache to DB", "nearestDryrunCacheHash", nearestDryrunCacheHash)
+			if status == CanonStatTy {
+				if err := tomoXService.SaveDryRunResult(nearestDryrunCacheHash); err != nil {
+					return events, coalescedLogs, err
+				}
+			}
+			if err := tomoXService.Snapshot(block); err != nil {
 				log.Error("Failed to snapshot tomox", "err", err)
 			}
 		}
@@ -2130,11 +2133,12 @@ func (bc *BlockChain) reorgTomox(block *types.Block, oldChain, newChain types.Bl
 	// For masternode:
 	if !tomoXService.IsSDKNode() {
 		// rollback snapshot to commonBlock
-		if err := bc.LoadTomoxStateAtBlock(block.Hash()); err != nil {
+		if err := bc.LoadTomoxStateAtBlock(tomoXService, block); err != nil {
 			return err
 		}
 		// Apply new chain
-		for _, newBlock := range newChain {
+		for i := len(newChain) - 1; i >= 0; i-- {
+			newBlock := newChain[i]
 			txMatchBatchData, err := ExtractMatchingTransactions(newBlock.Transactions())
 			if err != nil {
 				return err
@@ -2147,7 +2151,16 @@ func (bc *BlockChain) reorgTomox(block *types.Block, oldChain, newChain types.Bl
 						newBlock.NumberU64(), newBlock.Hash().Hex(), newBlock.HashNoValidator().Hex(), err)
 				}
 			}
-
+			if newBlock.NumberU64()%tomox.SnapshotInterval == 0 {
+				nearestDryrunCacheHash := bc.FindNearestDryrunCache(tomoXService, newBlock)
+				log.Debug("From reorgTomox: Periodically save dryruncache to DB", "nearestDryrunCacheHash", nearestDryrunCacheHash)
+				if err := tomoXService.SaveDryRunResult(nearestDryrunCacheHash); err != nil {
+					return err
+				}
+				if err := tomoXService.Snapshot(newBlock); err != nil {
+					log.Error("reorgTomox: failed to save snapshot", "err", err)
+				}
+			}
 		}
 		return nil
 	}
@@ -2185,47 +2198,65 @@ func (bc *BlockChain) reorgTomox(block *types.Block, oldChain, newChain types.Bl
 	return nil
 }
 
-func (bc *BlockChain) LoadTomoxStateAtBlock(blockhash common.Hash) error {
-	var tomoXService *tomox.TomoX
-	engine, ok := bc.Engine().(*posv.Posv)
-	if ok {
-		tomoXService = engine.GetTomoXService()
-	}
-	if tomoXService == nil {
-		return nil
-	}
-
+func (bc *BlockChain) LoadTomoxStateAtBlock(tomoXService *tomox.TomoX, block *types.Block) error {
 	defer func(start time.Time) {
 		log.Debug("LoadTomoxStateAtBlock takes ", "time", common.PrettyDuration(time.Since(start)))
 	}(time.Now())
 
 	gapChain := types.Blocks{}
-	b := bc.GetBlockByHash(blockhash)
+	b := bc.GetBlock(block.Hash(), block.NumberU64()-1)
 	if b == nil {
-		return nil
+		return fmt.Errorf("loadTomoxStateAtBlock: invalid blockhash. Hash: %s", block.Hash().Hex())
 	}
 	for b.NumberU64()%tomox.SnapshotInterval != 0 {
 		gapChain = append(gapChain, b)
-		b = bc.GetBlockByHash(b.ParentHash())
+		h := b.Hash()
+		ph := b.ParentHash()
+		b = bc.GetBlock(ph, b.NumberU64()-1)
 		if b == nil {
-			break
+			return fmt.Errorf("loadTomoxStateAtBlock: Unknown ancestor. Hash: %s . ParentHash: %s", h.Hex(), ph.Hex())
 		}
+
 	}
 	if err := tomoXService.LoadSnapshot(b.Hash()); err != nil {
 		return fmt.Errorf("loadTomoxStateAtBlock: failed to load tomox snapshot. Error: %v", err)
 	}
-	log.Debug("Tomox states rollback: successfully loaded tomox snapshot at block", "number", b.NumberU64(), "hash", b.Hash())
+	log.Debug("Tomox states rollback: successfully loaded tomox snapshot at block", "number", b.NumberU64(), "hash", b.HashNoValidator())
 	if len(gapChain) == 0 {
 		return nil
 	}
 	for i := len(gapChain) - 1; i >= 0; i-- {
 		b := gapChain[i]
 		log.Debug("Rollback tomox states to block", "number", b.NumberU64(), "hash", b.Hash())
-		if err := tomoXService.ApplyDryrunCache(b.Hash()); err != nil {
-			return err
+		if b.NumberU64()%tomox.SnapshotInterval == 0 {
+			nearestDryrunCacheHash := bc.FindNearestDryrunCache(tomoXService, b)
+			log.Debug("From LoadTomoxStateAtBlock: Periodically save dryruncache to DB", "nearestDryrunCacheHash", nearestDryrunCacheHash)
+			if err := tomoXService.SaveDryRunResult(nearestDryrunCacheHash); err != nil {
+				return err
+			}
+			if err := tomoXService.Snapshot(b); err != nil {
+				log.Error("reorgTomox: failed to save snapshot", "err", err)
+			}
 		}
 	}
 	return nil
+}
+
+func (bc *BlockChain) FindNearestDryrunCache(tomoXService *tomox.TomoX, block *types.Block) common.Hash {
+	if tomoXService.GetDB().HasDryrunCache(block.HashNoValidator()) {
+		log.Debug("FindNearestDryrunCache", "number", block.NumberU64(), "hash", block.HashNoValidator())
+		return block.HashNoValidator()
+	}
+	b := bc.GetBlock(block.ParentHash(), block.NumberU64()-1)
+	for b.NumberU64()%tomox.SnapshotInterval != 0 {
+		if tomoXService.GetDB().HasDryrunCache(b.HashNoValidator()) {
+			log.Debug("FindNearestDryrunCache", "number", b.NumberU64(), "hash", b.HashNoValidator())
+			return b.HashNoValidator()
+		}
+		b = bc.GetBlock(b.ParentHash(), b.NumberU64()-1)
+	}
+	log.Debug("NearestDryrunCache not found")
+	return common.Hash{}
 }
 
 func getProcessedOrders(txMatchBatchData []tomox.TxMatchBatch) ([]*tomox.OrderItem, error) {

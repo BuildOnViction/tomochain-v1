@@ -3,6 +3,7 @@ package tomox
 import (
 	"bytes"
 	"encoding/hex"
+	"reflect"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -13,7 +14,7 @@ import (
 )
 
 const (
-	defaultCacheLimit = 1024
+	defaultCacheLimit = 1024000
 )
 
 type BatchItem struct {
@@ -79,7 +80,7 @@ func (db *BatchDatabase) Has(key []byte, dryrun bool, blockHash common.Hash) (bo
 		db.lock.Lock()
 		dryrunCache, ok := db.dryRunCaches[blockHash]
 		db.lock.Unlock()
-		if ok && dryrunCache.Len() >= 0 && db.dryRunCaches[blockHash].Contains(cacheKey) {
+		if ok && dryrunCache.Len() >= 0 && dryrunCache.Contains(cacheKey) {
 			return true, nil
 		}
 	} else if db.cacheItems.Contains(cacheKey) {
@@ -102,7 +103,7 @@ func (db *BatchDatabase) Get(key []byte, val interface{}, dryrun bool, blockHash
 		dryrunCache, ok := db.dryRunCaches[blockHash]
 		db.lock.Unlock()
 		if ok && dryrunCache.Len() >= 0 {
-			if value, ok := db.dryRunCaches[blockHash].Get(cacheKey); ok {
+			if value, ok := dryrunCache.Get(cacheKey); ok {
 				return value, nil
 			}
 		}
@@ -146,8 +147,10 @@ func (db *BatchDatabase) Put(key []byte, val interface{}, dryrun bool, blockHash
 		db.lock.Unlock()
 		if !ok {
 			log.Debug("BatchDB - Put: DryrunCache of this block is not initialized. Initialize now!", "blockHash", blockHash)
-			db.InitDryRunMode(blockHash)
+			db.InitDryRunMode(blockHash, common.Hash{})
+			db.lock.Lock()
 			dryrunCache, _ = db.dryRunCaches[blockHash]
+			db.lock.Unlock()
 		}
 		dryrunCache.Add(cacheKey, val)
 		return nil
@@ -173,8 +176,10 @@ func (db *BatchDatabase) Delete(key []byte, dryrun bool, blockHash common.Hash) 
 		db.lock.Unlock()
 		if !ok {
 			log.Debug("BatchDB - Delete: DryrunCache of this block is not initialized. Initialize now!", "blockHash", blockHash)
-			db.InitDryRunMode(blockHash)
+			db.InitDryRunMode(blockHash, common.Hash{})
+			db.lock.Lock()
 			dryrunCache, _ = db.dryRunCaches[blockHash]
+			db.lock.Unlock()
 		}
 		dryrunCache.Add(cacheKey, nil)
 		return nil
@@ -184,27 +189,81 @@ func (db *BatchDatabase) Delete(key []byte, dryrun bool, blockHash common.Hash) 
 	return db.db.Delete(key)
 }
 
-func (db *BatchDatabase) InitDryRunMode(blockHash common.Hash) {
-	log.Debug("Start dry-run mode, clear old data", "blockhash", blockHash)
+func (db *BatchDatabase) InitDryRunMode(blockHashNoValidator, parentHashNoValidator common.Hash) {
+	log.Debug("Start dry-run mode, clear old data", "blockhash", blockHashNoValidator, "parent", parentHashNoValidator)
 	db.lock.Lock()
-	dryrunCache, ok := db.dryRunCaches[blockHash]
+	dryrunCache, ok := db.dryRunCaches[blockHashNoValidator]
 	db.lock.Unlock()
 
 	// if the dryrunCache of this blockHash already existed, purge it
 	// otherwise, initialize new cache for it
+	// then copy all changes from parent cache
 	// Finally, assign the cache to db.dryRunCaches
 	if ok && dryrunCache != nil {
 		dryrunCache.Purge()
 	} else {
 		dryrunCache, _ = lru.New(db.cacheLimit)
 	}
+	if parentHashNoValidator != (common.Hash{}) {
+		db.lock.Lock()
+		// copy all changes from parent
+		parentCache, ok := db.dryRunCaches[parentHashNoValidator]
+		db.lock.Unlock()
+		if ok && parentCache.Len() > 0 {
+			for _, cacheKey := range parentCache.Keys() {
+				val, ok := parentCache.Get(cacheKey)
+				if ok {
+					if val != nil && reflect.ValueOf(val).Kind() == reflect.Ptr {
+						// val may be pointer, should not copy a pointer
+						// encode/decode to clone values
+						encoded, _ := EncodeBytesItem(val)
+						switch val.(type) {
+						case *Item:
+							value := &Item{}
+							DecodeBytesItem(encoded, value)
+							dryrunCache.Add(cacheKey, value)
+							break
+						case *OrderItem:
+							value := &OrderItem{}
+							DecodeBytesItem(encoded, value)
+							dryrunCache.Add(cacheKey, value)
+							break
+						case *OrderListItem:
+							value := &OrderListItem{}
+							DecodeBytesItem(encoded, value)
+							dryrunCache.Add(cacheKey, value)
+							break
+						case *OrderTreeItem:
+							value := &OrderTreeItem{}
+							DecodeBytesItem(encoded, value)
+							dryrunCache.Add(cacheKey, value)
+							break
+						case *OrderBookItem:
+							value := &OrderBookItem{}
+							DecodeBytesItem(encoded, value)
+							dryrunCache.Add(cacheKey, value)
+							break
+						}
+					} else {
+						dryrunCache.Add(cacheKey, val)
+					}
+
+				}
+			}
+		}
+	}
 	db.lock.Lock()
-	db.dryRunCaches[blockHash] = dryrunCache
+	db.dryRunCaches[blockHashNoValidator] = dryrunCache
 	db.lock.Unlock()
 }
 
 func (db *BatchDatabase) SaveDryRunResult(blockHash common.Hash) error {
 	log.Debug("Start saving dry-run result to DB ", "blockhash", blockHash)
+	defer func() {
+		db.lock.Lock()
+		delete(db.dryRunCaches, blockHash)
+		db.lock.Unlock()
+	}()
 	db.lock.Lock()
 	dryrunCache, ok := db.dryRunCaches[blockHash]
 	db.lock.Unlock()
@@ -245,13 +304,29 @@ func (db *BatchDatabase) SaveDryRunResult(blockHash common.Hash) error {
 		}
 	}
 	log.Debug("Successfully saved dry-run result to DB ", "blockhash", blockHash)
-	dryrunCache.Purge()
-	db.lock.Lock()
-	delete(db.dryRunCaches, blockHash)
-	db.lock.Unlock()
 	// purge reading cache to refresh data from db
 	db.cacheItems.Purge()
 	return batch.Write()
+}
+
+func (db *BatchDatabase) HasDryrunCache(blockhash common.Hash) bool {
+	db.lock.Lock()
+	cache, ok := db.dryRunCaches[blockhash]
+	db.lock.Unlock()
+	if ok && cache.Len() > 0 {
+		return true
+	}
+	return false
+}
+
+func (db *BatchDatabase) DropDryrunCache(blockhash common.Hash) {
+	db.lock.Lock()
+	cache, ok := db.dryRunCaches[blockhash]
+	delete(db.dryRunCaches, blockhash)
+	db.lock.Unlock()
+	if ok && cache != nil {
+		cache.Purge()
+	}
 }
 
 func (db *BatchDatabase) DeleteTxMatchByTxHash(txhash common.Hash) error {

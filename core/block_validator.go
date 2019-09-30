@@ -77,6 +77,14 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 		return fmt.Errorf("transaction root hash mismatch: have %x, want %x", hash, header.TxHash)
 	}
 
+	txMatchBatchData, err := ExtractMatchingTransactions(block.Transactions())
+	if err != nil {
+		return err
+	}
+	if len(txMatchBatchData) == 0 {
+		return nil
+	}
+
 	var tomoXService *tomox.TomoX
 	engine, ok := v.engine.(*posv.Posv)
 	if ok {
@@ -91,17 +99,8 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 
 	// clear the previous dry-run cache
 	if tomoXService != nil {
-		head := v.bc.CurrentBlock()
-		if block.ParentHash() != head.Hash() {
-			if err := v.bc.LoadTomoxStateAtBlock(block.ParentHash()); err != nil {
-				return err
-			}
-		}
-		tomoXService.GetDB().InitDryRunMode(hashNoValidator)
-	}
-	txMatchBatchData, err := ExtractMatchingTransactions(block.Transactions())
-	if err != nil {
-		return err
+		parent := v.bc.GetBlock(block.ParentHash(), block.NumberU64()-1)
+		tomoXService.GetDB().InitDryRunMode(hashNoValidator, v.bc.FindNearestDryrunCache(tomoXService, parent))
 	}
 	for _, txMatchBatch := range txMatchBatchData {
 		if tomoXService == nil {

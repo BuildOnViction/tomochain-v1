@@ -2,6 +2,7 @@ package tomox
 
 import (
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"math/big"
 	"math/rand"
 	"os"
@@ -154,7 +155,7 @@ func TestTomoX_Snapshot(t *testing.T) {
 		}),
 	}
 	defer os.RemoveAll(testDir)
-	blockHash := common.StringToHash("aaa")
+	block := types.NewBlock(&types.Header{}, []*types.Transaction{}, []*types.Header{}, []*types.Receipt{})
 	pair := "aaa/tomo"
 
 	// orderbooks["aaa/tomo"] has 2 bids orders and 2 asks orders
@@ -170,8 +171,8 @@ func TestTomoX_Snapshot(t *testing.T) {
 		t.Error(err)
 	}
 	tomox.activePairs[pair] = true
-	if err := tomox.Snapshot(blockHash); err != nil {
-		t.Error("Failed to store snapshot", "err", err, "blockHash", blockHash)
+	if err := tomox.Snapshot(block); err != nil {
+		t.Error("Failed to store snapshot", "err", err, "block", block)
 	}
 
 
@@ -197,14 +198,14 @@ func TestTomoX_Snapshot(t *testing.T) {
 		t.Error("Expected an error due to wrong hash")
 	}
 
-	newSnap, err = getSnapshot(tomox.db, blockHash)
+	newSnap, err = getSnapshot(tomox.db, block.Hash())
 	if err != nil {
 		t.Error("Failed to load snapshot", err)
 	}
 
 	// verify snapshot hash
-	if newSnap.Hash != blockHash {
-		t.Error("Wrong snapshot hash", "expected", blockHash, "actual", newSnap.Hash)
+	if newSnap.Hash != block.Hash() {
+		t.Error("Wrong snapshot hash", "expected", block, "actual", newSnap.Hash)
 	}
 
 	// load orderbook of an invalid pair

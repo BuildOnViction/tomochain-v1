@@ -602,7 +602,6 @@ func (self *worker) commitNewWork() {
 	feeCapacity := state.GetTRC21FeeCapacityFromStateWithCache(parent.Root(), work.state)
 	if self.config.Posv != nil && header.Number.Uint64()%self.config.Posv.Epoch != 0 {
 		tomoX := self.eth.GetTomoX()
-
 		if tomoX != nil && header.Number.Uint64() > self.config.Posv.Epoch {
 			manager := self.eth.AccountManager()
 			if manager != nil {
@@ -620,7 +619,7 @@ func (self *worker) commitNewWork() {
 				orderPending, err := self.eth.OrderPool().Pending()
 				if err == nil {
 					log.Debug("Start processing order pending", "len", len(orderPending))
-					txMatches := tomoX.ProcessOrderPending(orderPending)
+					txMatches := tomoX.ProcessOrderPending(orderPending, self.chain.FindNearestDryrunCache(tomoX, self.chain.CurrentBlock()))
 					if len(txMatches) > 0 {
 						log.Debug("transaction matches found", "txMatches", len(txMatches))
 						// put all TxMatchesData into only one tx

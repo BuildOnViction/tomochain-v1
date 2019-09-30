@@ -54,7 +54,7 @@ const (
 	pendingCancelPrefix  = "XPCANCEL"
 	orderProcessedLimit  = 1000
 	orderProcessLimit    = 20
-	SnapshotInterval     = 1 // 1 block
+	SnapshotInterval     = 100 // 100 blocks
 
 )
 
@@ -835,10 +835,11 @@ func (tomox *TomoX) GetAsksTree(pairName string, dryrun bool, blockHash common.H
 	return ob.Asks, nil
 }
 
-func (tomox *TomoX) ProcessOrderPending(pending map[common.Address]types.OrderTransactions) []TxDataMatch {
+func (tomox *TomoX) ProcessOrderPending(pending map[common.Address]types.OrderTransactions, nearestDryrunCacheHash common.Hash) []TxDataMatch {
 	blockHash := common.StringToHash("COMMIT_NEW_WORK")
 	txMatches := []TxDataMatch{}
-	tomox.db.InitDryRunMode(blockHash)
+	tomox.db.InitDryRunMode(blockHash, nearestDryrunCacheHash)
+	defer tomox.db.DropDryrunCache(blockHash)
 
 	log.Debug("Get pending orders to process")
 	for _, txs := range pending {
@@ -1168,11 +1169,12 @@ func (tomox *TomoX) listTokenPairs() []string {
 	return activePairs
 }
 
-func (tomox *TomoX) Snapshot(blockHash common.Hash) error {
+func (tomox *TomoX) Snapshot(block *types.Block) error {
 	var (
 		snap *Snapshot
 		err  error
 	)
+	blockHash := block.Hash()
 	defer func(start time.Time) {
 		if err != nil {
 			log.Error("Failed to snapshot ", "err", err, "time", common.PrettyDuration(time.Since(start)), "hash", blockHash)
@@ -1187,8 +1189,8 @@ func (tomox *TomoX) Snapshot(blockHash common.Hash) error {
 	if err = snap.store(tomox.db); err != nil {
 		return err
 	}
-
-	if err = tomox.db.Put([]byte(latestSnapshotKey), &blockHash, false, common.Hash{}); err != nil {
+	tomox.db.InitDryRunMode(block.HashNoValidator(), common.Hash{})
+	if err = tomox.db.Put([]byte(latestSnapshotKey), &blockHash, true, block.HashNoValidator()); err != nil {
 		return err
 	}
 
@@ -1199,7 +1201,6 @@ func (tomox *TomoX) LoadSnapshot(hash common.Hash) error {
 	// load orderbook from snapshot
 	var (
 		snap *Snapshot
-		val  interface{}
 		ob   *OrderBook
 		err  error
 	)
@@ -1213,11 +1214,7 @@ func (tomox *TomoX) LoadSnapshot(hash common.Hash) error {
 	}(time.Now())
 
 	if hash == (common.Hash{}) {
-		if val, err = tomox.db.Get([]byte(latestSnapshotKey), &common.Hash{}, false, common.Hash{}); err != nil {
-			// no snapshot found
-			return err
-		}
-		hash = *val.(*common.Hash)
+		return fmt.Errorf("LoadSnapshot: empty hash")
 	}
 	if snap, err = getSnapshot(tomox.db, hash); err != nil || len(snap.OrderBooks) == 0 {
 		return err
@@ -1236,13 +1233,6 @@ func (tomox *TomoX) LoadSnapshot(hash common.Hash) error {
 // save orderbook after matching orders
 // update order pending list, processed list
 func (tomox *TomoX) ApplyTxMatches(orders []*OrderItem, blockHash common.Hash) error {
-	if !tomox.IsSDKNode() {
-		if err := tomox.db.SaveDryRunResult(blockHash); err != nil {
-			log.Error("Failed to save dry-run result", "err", err)
-			return err
-		}
-	}
-
 	for _, order := range orders {
 		if err := tomox.addProcessedOrderHash(order.Hash, order.Status == OrderStatusCancelled, blockHash); err != nil {
 			log.Error("Failed to mark order as processed", "err", err)
@@ -1254,7 +1244,15 @@ func (tomox *TomoX) ApplyTxMatches(orders []*OrderItem, blockHash common.Hash) e
 		}
 
 	}
-	tomox.db.InitDryRunMode(blockHash)
+	return nil
+}
+
+func (tomox *TomoX) SaveDryRunResult(blockHash common.Hash) error {
+	if !tomox.IsSDKNode() && blockHash != (common.Hash{}) {
+		if err := tomox.db.SaveDryRunResult(blockHash); err != nil {
+			return fmt.Errorf("Failed to save dry-run result. err: %v", err)
+		}
+	}
 	return nil
 }
 
