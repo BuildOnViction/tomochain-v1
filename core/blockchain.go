@@ -2122,6 +2122,11 @@ func (bc *BlockChain) reorgTomox(block *types.Block, oldChain, newChain types.Bl
 	if tomoXService == nil {
 		return nil
 	}
+
+	defer func(start time.Time) {
+		log.Debug("reorgTomox takes ", "time", common.PrettyDuration(time.Since(start)))
+	}(time.Now())
+
 	// For masternode:
 	if !tomoXService.IsSDKNode() {
 		// rollback snapshot to commonBlock
@@ -2189,6 +2194,11 @@ func (bc *BlockChain) LoadTomoxStateAtBlock(blockhash common.Hash) error {
 	if tomoXService == nil {
 		return nil
 	}
+
+	defer func(start time.Time) {
+		log.Debug("LoadTomoxStateAtBlock takes ", "time", common.PrettyDuration(time.Since(start)))
+	}(time.Now())
+
 	gapChain := types.Blocks{}
 	b := bc.GetBlockByHash(blockhash)
 	if b == nil {
