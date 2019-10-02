@@ -1610,10 +1610,6 @@ func (bc *BlockChain) insertBlock(block *types.Block) ([]interface{}, []*types.L
 				if err != nil {
 					return events, coalescedLogs, err
 				}
-				txMatchBatchData, err := ExtractMatchingTransactions(block.Transactions())
-				if err != nil {
-					return events, coalescedLogs, err
-				}
 				if err := logDataToSdkNode(tomoXService, txMatchBatchData, currentState); err != nil {
 					return events, coalescedLogs, err
 				}
