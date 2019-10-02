@@ -80,8 +80,13 @@ func (db *BatchDatabase) Has(key []byte, dryrun bool, blockHash common.Hash) (bo
 		db.lock.Lock()
 		dryrunCache, ok := db.dryRunCaches[blockHash]
 		db.lock.Unlock()
-		if ok && dryrunCache.Len() >= 0 && dryrunCache.Contains(cacheKey) {
-			return true, nil
+		if ok && dryrunCache.Len() > 0 {
+			if val, ok := dryrunCache.Get(cacheKey); ok {
+				if val == nil {
+					return false, nil
+				}
+				return true, nil
+			}
 		}
 	} else if db.cacheItems.Contains(cacheKey) {
 		// for dry-run mode, do not read cacheItems
@@ -102,7 +107,7 @@ func (db *BatchDatabase) Get(key []byte, val interface{}, dryrun bool, blockHash
 		db.lock.Lock()
 		dryrunCache, ok := db.dryRunCaches[blockHash]
 		db.lock.Unlock()
-		if ok && dryrunCache.Len() >= 0 {
+		if ok && dryrunCache.Len() > 0 {
 			if value, ok := dryrunCache.Get(cacheKey); ok {
 				return value, nil
 			}
