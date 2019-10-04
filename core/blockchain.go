@@ -1333,7 +1333,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 				if err = tomoXService.ApplyTxMatches(processedOrders, block.HashNoValidator()); err != nil {
 					return i, events, coalescedLogs, err
 				}
-				if tomoXService.IsSDKNode() {
+				if tomoXService.IsSDKNode() && status == CanonStatTy {
 					currentState, err := bc.State()
 					if err != nil {
 						return i, events, coalescedLogs, err
@@ -1605,7 +1605,7 @@ func (bc *BlockChain) insertBlock(block *types.Block) ([]interface{}, []*types.L
 			if err = tomoXService.ApplyTxMatches(processedOrders, block.HashNoValidator()); err != nil {
 				return events, coalescedLogs, err
 			}
-			if tomoXService.IsSDKNode() {
+			if tomoXService.IsSDKNode() && status == CanonStatTy {
 				currentState, err := bc.State()
 				if err != nil {
 					return events, coalescedLogs, err

@@ -25,7 +25,6 @@ const (
 )
 
 type Trade struct {
-	ID             bson.ObjectId  `json:"id,omitempty" bson:"_id"`
 	Taker          common.Address `json:"taker" bson:"taker"`
 	Maker          common.Address `json:"maker" bson:"maker"`
 	BaseToken      common.Address `json:"baseToken" bson:"baseToken"`
@@ -48,7 +47,6 @@ type Trade struct {
 }
 
 type TradeBSON struct {
-	ID             bson.ObjectId `json:"id" bson:"_id"`
 	Taker          string        `json:"taker" bson:"taker"`
 	Maker          string        `json:"maker" bson:"maker"`
 	BaseToken      string        `json:"baseToken" bson:"baseToken"`
@@ -72,7 +70,6 @@ type TradeBSON struct {
 
 func (t *Trade) GetBSON() (interface{}, error) {
 	tr := TradeBSON{
-		ID:             t.ID,
 		PairName:       t.PairName,
 		Maker:          t.Maker.Hex(),
 		Taker:          t.Taker.Hex(),
@@ -105,7 +102,6 @@ func (t *Trade) SetBSON(raw bson.Raw) error {
 		return err
 	}
 
-	t.ID = decoded.ID
 	t.PairName = decoded.PairName
 	t.Taker = common.HexToAddress(decoded.Taker)
 	t.Maker = common.HexToAddress(decoded.Maker)

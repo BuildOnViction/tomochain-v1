@@ -1345,18 +1345,13 @@ func (tomox *TomoX) SyncDataToSDKNode(txDataMatch TxDataMatch, txHash common.Has
 
 func (tomox *TomoX) updateMatchedOrder(hashString string, filledAmount *big.Int) error {
 	db := tomox.GetDB()
-	orderHashBytes, err := hex.DecodeString(hashString)
-	if err != nil {
-		return fmt.Errorf("SDKNode: failed to decode orderKey. Key: %s", hashString)
-	}
-	val, err := db.Get(orderHashBytes, &OrderItem{}, false, common.Hash{})
+	orderHash := common.HexToHash(hashString)
+	val, err := db.Get(orderHash.Bytes(), &OrderItem{}, false, common.Hash{})
 	if err != nil || val == nil {
 		return fmt.Errorf("SDKNode: failed to get order. Key: %s", hashString)
 	}
 	matchedOrder := val.(*OrderItem)
-	updatedFillAmount := new(big.Int)
-	updatedFillAmount.Add(matchedOrder.FilledAmount, filledAmount)
-	matchedOrder.FilledAmount = updatedFillAmount
+	matchedOrder.FilledAmount.Add(matchedOrder.FilledAmount, filledAmount)
 	if matchedOrder.FilledAmount.Cmp(matchedOrder.Quantity) < 0 {
 		matchedOrder.Status = OrderStatusPartialFilled
 	} else {
