@@ -109,6 +109,9 @@ func (db *BatchDatabase) Get(key []byte, val interface{}, dryrun bool, blockHash
 		db.lock.Unlock()
 		if ok && dryrunCache.Len() > 0 {
 			if value, ok := dryrunCache.Get(cacheKey); ok {
+				if value == nil {
+					log.Debug("Key not found in dryruncache", "key", hex.EncodeToString(key), "blockhash", blockHash.Hex())
+				}
 				return value, nil
 			}
 		}

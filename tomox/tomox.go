@@ -1189,10 +1189,6 @@ func (tomox *TomoX) Snapshot(block *types.Block) error {
 	if err = snap.store(tomox.db); err != nil {
 		return err
 	}
-	tomox.db.InitDryRunMode(block.HashNoValidator(), common.Hash{})
-	if err = tomox.db.Put([]byte(latestSnapshotKey), &blockHash, true, block.HashNoValidator()); err != nil {
-		return err
-	}
 
 	return nil
 }
@@ -1274,7 +1270,6 @@ func (tomox *TomoX) SyncDataToSDKNode(txDataMatch TxDataMatch, txHash common.Has
 
 	// 1. put processed order to db
 	if order, err = txDataMatch.DecodeOrder(); err != nil {
-		log.Error("SDK node decode order failed", "txDataMatch", txDataMatch)
 		return fmt.Errorf("SDK node decode order failed")
 	}
 

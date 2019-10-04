@@ -99,8 +99,12 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 
 	// clear the previous dry-run cache
 	if tomoXService != nil {
-		parent := v.bc.GetBlock(block.ParentHash(), block.NumberU64()-1)
-		tomoXService.GetDB().InitDryRunMode(hashNoValidator, v.bc.FindNearestDryrunCache(tomoXService, parent))
+		if (block.NumberU64()-1)%tomox.SnapshotInterval == 0 {
+			tomoXService.GetDB().InitDryRunMode(hashNoValidator, common.Hash{})
+		} else {
+			parent := v.bc.GetBlock(block.ParentHash(), block.NumberU64()-1)
+			tomoXService.GetDB().InitDryRunMode(hashNoValidator, v.bc.FindNearestDryrunCache(tomoXService, parent))
+		}
 	}
 	for _, txMatchBatch := range txMatchBatchData {
 		if tomoXService == nil {

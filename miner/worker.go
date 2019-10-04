@@ -619,7 +619,11 @@ func (self *worker) commitNewWork() {
 				orderPending, err := self.eth.OrderPool().Pending()
 				if err == nil {
 					log.Debug("Start processing order pending", "len", len(orderPending))
-					txMatches := tomoX.ProcessOrderPending(orderPending, self.chain.FindNearestDryrunCache(tomoX, self.chain.CurrentBlock()))
+					parentCacheHash := common.Hash{}
+					if self.chain.CurrentBlock().NumberU64()%tomox.SnapshotInterval != 0 {
+						parentCacheHash = self.chain.FindNearestDryrunCache(tomoX, self.chain.CurrentBlock())
+					}
+					txMatches := tomoX.ProcessOrderPending(orderPending, parentCacheHash)
 					if len(txMatches) > 0 {
 						log.Debug("transaction matches found", "txMatches", len(txMatches))
 						// put all TxMatchesData into only one tx

@@ -2256,7 +2256,7 @@ func (bc *BlockChain) FindNearestDryrunCache(tomoXService *tomox.TomoX, block *t
 }
 
 func getProcessedOrders(txMatchBatchData []tomox.TxMatchBatch) ([]*tomox.OrderItem, error) {
-	orders := []*tomox.OrderItem{}
+	var orders []*tomox.OrderItem
 	for _, txMatchBatch := range txMatchBatchData {
 		for _, txMatch := range txMatchBatch.Data {
 			order, err := txMatch.DecodeOrder()
