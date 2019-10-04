@@ -255,8 +255,9 @@ func (db *MongoDatabase) CommitTrade(t *Trade) error {
 	sc := db.Session.Copy()
 	defer sc.Close()
 
-	t.ID = bson.NewObjectId()
-	t.CreatedAt = time.Now()
+	if t.CreatedAt.IsZero() {
+		t.CreatedAt = time.Now()
+	}
 	t.UpdatedAt = time.Now()
 
 	query := bson.M{"hash": t.Hash.Hex()}
