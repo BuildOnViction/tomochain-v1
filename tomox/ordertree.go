@@ -226,8 +226,11 @@ func (orderTree *OrderTree) OrderExist(key []byte, price *big.Int, dryrun bool, 
 }
 
 func (orderTree *OrderTree) InsertOrder(order *OrderItem, dryrun bool, blockHash common.Hash) error {
-
 	price := order.Price
+	if orderTree.OrderExist(GetKeyFromBig(new(big.Int).SetUint64(order.OrderID)), price, dryrun, blockHash) {
+		log.Warn("order already existed", "order", order)
+		return nil
+	}
 
 	var orderList *OrderList
 
@@ -243,13 +246,6 @@ func (orderTree *OrderTree) InsertOrder(order *OrderItem, dryrun bool, blockHash
 	if orderList != nil {
 
 		order := NewOrder(order, GetOrderListCommonKey(orderList.Key, orderTree.orderBook.Item.Name))
-
-		if orderList.OrderExist(order.Key, dryrun, blockHash) {
-			if err := orderTree.RemoveOrder(order, dryrun, blockHash); err != nil {
-				return err
-			}
-		}
-
 		// append order to order list
 		log.Debug("debug orderlist", "before", orderList.Item)
 		if err := orderList.AppendOrder(order, dryrun, blockHash); err != nil {
