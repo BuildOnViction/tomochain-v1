@@ -15,6 +15,7 @@ import (
 
 const (
 	defaultCacheLimit = 1024000
+	dryrunCacheLimit = 200
 )
 
 type BatchItem struct {
@@ -26,6 +27,7 @@ type BatchDatabase struct {
 	emptyKey     []byte
 	cacheItems   *lru.Cache // Cache for reading
 	dryRunCaches map[common.Hash]*lru.Cache
+	recentCaches []common.Hash
 	lock         sync.RWMutex
 	cacheLimit   int
 	Debug        bool
@@ -55,6 +57,7 @@ func NewBatchDatabaseWithEncode(datadir string, cacheLimit int) *BatchDatabase {
 		cacheItems:   cacheItems,
 		emptyKey:     EmptyKey(), // pre alloc for comparison
 		dryRunCaches: make(map[common.Hash]*lru.Cache),
+		recentCaches: []common.Hash{},
 		cacheLimit:   itemCacheLimit,
 	}
 
@@ -151,9 +154,9 @@ func (db *BatchDatabase) Put(key []byte, val interface{}, dryrun bool, blockHash
 	cacheKey := db.getCacheKey(key)
 	if dryrun {
 		db.lock.Lock()
-		dryrunCache, ok := db.dryRunCaches[blockHash]
+		dryrunCache, _ := db.dryRunCaches[blockHash]
 		db.lock.Unlock()
-		if !ok {
+		if dryrunCache == nil {
 			log.Debug("BatchDB - Put: DryrunCache of this block is not initialized. Initialize now!", "blockHash", blockHash)
 			db.InitDryRunMode(blockHash, common.Hash{})
 			db.lock.Lock()
@@ -198,6 +201,10 @@ func (db *BatchDatabase) Delete(key []byte, dryrun bool, blockHash common.Hash) 
 }
 
 func (db *BatchDatabase) InitDryRunMode(blockHashNoValidator, parentHashNoValidator common.Hash) {
+	if len(db.recentCaches) >= dryrunCacheLimit {
+		db.DropDryrunCache(db.recentCaches[0])
+		db.recentCaches = db.recentCaches[1:]
+	}
 	log.Debug("Start dry-run mode, clear old data", "blockhash", blockHashNoValidator, "parent", parentHashNoValidator)
 	db.lock.Lock()
 	dryrunCache, ok := db.dryRunCaches[blockHashNoValidator]
@@ -262,6 +269,7 @@ func (db *BatchDatabase) InitDryRunMode(blockHashNoValidator, parentHashNoValida
 	}
 	db.lock.Lock()
 	db.dryRunCaches[blockHashNoValidator] = dryrunCache
+	db.recentCaches = append(db.recentCaches, blockHashNoValidator)
 	db.lock.Unlock()
 }
 
@@ -328,6 +336,7 @@ func (db *BatchDatabase) HasDryrunCache(blockhash common.Hash) bool {
 }
 
 func (db *BatchDatabase) DropDryrunCache(blockhash common.Hash) {
+	log.Debug("DropdryrunCache", "blockhash", blockhash)
 	db.lock.Lock()
 	cache, ok := db.dryRunCaches[blockhash]
 	delete(db.dryRunCaches, blockhash)
