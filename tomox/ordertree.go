@@ -78,6 +78,8 @@ func (orderTree *OrderTree) Save(dryrun bool, blockHash common.Hash) error {
 	if priceTreeRoot != nil {
 		orderTree.Item.PriceTreeKey = priceTreeRoot.Key
 	} else if orderTree.Depth() == 0 {
+		orderTree.Item.NumOrders = 0
+		orderTree.Item.Volume = Zero()
 		orderTree.Item.PriceTreeKey = EmptyKey()
 		orderTree.Item.PriceTreeSize = 0
 		orderTree.PriceTree.Clear()
@@ -314,6 +316,16 @@ func (orderTree *OrderTree) UpdateOrder(orderItem *OrderItem, dryrun bool, block
 }
 
 func (orderTree *OrderTree) RemoveOrderFromOrderList(order *Order, orderList *OrderList, dryrun bool, blockHash common.Hash) error {
+
+	// update orderTree
+	orderTree.Item.Volume = Sub(orderTree.Item.Volume, order.Item.Quantity)
+
+	// delete(orderTree.OrderMap, orderID)
+	orderTree.Item.NumOrders--
+
+	if err := orderTree.Save(dryrun, blockHash); err != nil {
+		return err
+	}
 	// next update orderList
 	if err := orderList.RemoveOrder(order, dryrun, blockHash); err != nil {
 		return err
@@ -333,14 +345,6 @@ func (orderTree *OrderTree) RemoveOrderFromOrderList(order *Order, orderList *Or
 		}
 		log.Debug("Removed price list", "price", order.Item.Price.String())
 	}
-
-	// update orderTree
-	orderTree.Item.Volume = Sub(orderTree.Item.Volume, order.Item.Quantity)
-
-	// delete(orderTree.OrderMap, orderID)
-	orderTree.Item.NumOrders--
-
-	// should use batch to optimize the performance
 	return nil
 }
 
@@ -352,11 +356,6 @@ func (orderTree *OrderTree) RemoveOrder(order *Order, dryrun bool, blockHash com
 	}
 	if orderList != nil {
 		if err := orderTree.RemoveOrderFromOrderList(order, orderList, dryrun, blockHash); err != nil {
-			return err
-		}
-
-		// snapshot ordertree
-		if err := orderTree.Save(dryrun, blockHash); err != nil {
 			return err
 		}
 	}
