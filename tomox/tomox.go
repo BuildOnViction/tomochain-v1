@@ -1095,20 +1095,17 @@ func (tomox *TomoX) getPendingOrders() []OrderPending {
 }
 
 func (tomox *TomoX) addProcessedOrderHash(orderHash common.Hash, cancel bool, blockhash common.Hash) error {
-	if !tomox.processedOrderCache.Add(orderHash, blockhash) {
-		// remove order from pending list
-		if err := tomox.RemoveOrderFromPending(orderHash, cancel); err != nil {
-			log.Warn("Double check pending order at addProcessedOrderHash. Failed to remove pending hash", "err", err, "orderHash", orderHash)
-		}
-
-		// remove order pending
-		if err := tomox.RemoveOrderPendingFromDB(orderHash, cancel); err != nil {
-			log.Warn("Double check pending order at addProcessedOrderHash. Failed to remove pending order", "err", err, "orderHash", orderHash)
-		}
-		return nil
-	} else {
-		return fmt.Errorf("Can't add processed order to cache: orderHash - %s", orderHash.Hex())
+	tomox.processedOrderCache.Add(orderHash, blockhash)
+	// remove order from pending list
+	if err := tomox.RemoveOrderFromPending(orderHash, cancel); err != nil {
+		log.Warn("Double check pending order at addProcessedOrderHash. Failed to remove pending hash", "err", err, "orderHash", orderHash)
 	}
+
+	// remove order pending
+	if err := tomox.RemoveOrderPendingFromDB(orderHash, cancel); err != nil {
+		log.Warn("Double check pending order at addProcessedOrderHash. Failed to remove pending order", "err", err, "orderHash", orderHash)
+	}
+	return nil
 }
 
 func (tomox *TomoX) ExistProcessedOrderHash(orderHash common.Hash, blockhash common.Hash) bool {
