@@ -65,7 +65,7 @@ func (tree *Tree) Put(key []byte, value []byte, dryrun bool, blockHash common.Ha
 	if tree.IsEmptyKey(tree.rootKey) {
 		// Assert key is of comparator's type for initial tree
 		item := &Item{Value: value, Color: red, Keys: &KeyMeta{}}
-		log.Debug("RootKey hasn't been set. Set it now", "rootkey", hex.EncodeToString(key), "all keys", tree.KeysinString(true, blockHash))
+		//log.Debug("RootKey hasn't been set. Set it now", "rootkey", hex.EncodeToString(key), "all keys", tree.KeysinString(true, blockHash))
 		tree.rootKey = key
 		insertedNode = &Node{Key: key, Item: item}
 	} else {
@@ -113,7 +113,7 @@ func (tree *Tree) Put(key []byte, value []byte, dryrun bool, blockHash common.Ha
 	}
 
 	tree.insertCase1(insertedNode, dryrun, blockHash)
-	log.Debug("Put node", "insertedNode key", hex.EncodeToString(insertedNode.Key), "all keys", tree.KeysinString(true, blockHash))
+	//log.Debug("Put node", "insertedNode key", hex.EncodeToString(insertedNode.Key), "all keys", tree.KeysinString(true, blockHash))
 	tree.Save(insertedNode, dryrun, blockHash)
 
 	tree.size++
@@ -188,11 +188,11 @@ func (tree *Tree) Remove(key []byte, dryrun bool, blockHash common.Hash) {
 			if parent != nil {
 				if !tree.IsEmptyKey(parent.LeftKey()) && bytes.Equal(parent.LeftKey(), node.Key) {
 					parent.Item.Keys.Left = EmptyKey()
-					log.Debug("Set parent.LeftKey() to nil", "parent.Key", parent.Item.Keys)
+					//log.Debug("Set parent.LeftKey() to nil", "parent.Key", parent.Item.Keys)
 					tree.Save(parent, dryrun, blockHash)
 				} else if !tree.IsEmptyKey(parent.RightKey()) && bytes.Equal(parent.RightKey(), node.Key) {
 					parent.Item.Keys.Right = EmptyKey()
-					log.Debug("Set parent.RightKey() to nil", "parent.Key", parent.Item.Keys)
+					//log.Debug("Set parent.RightKey() to nil", "parent.Key", parent.Item.Keys)
 					tree.Save(parent, dryrun, blockHash)
 				} else {
 					log.Error("Parent doesn't have node as child", "node.Key", hex.EncodeToString(node.Key))
@@ -203,7 +203,7 @@ func (tree *Tree) Remove(key []byte, dryrun bool, blockHash common.Hash) {
 				tree.rootKey = EmptyKey()
 			}
 			tree.deleteNode(node, dryrun, blockHash)
-			log.Debug("Removed node with child = nil", "node", hex.EncodeToString(node.Key), "all keys", tree.KeysinString(true, blockHash))
+			//log.Debug("Removed node with child = nil", "node", hex.EncodeToString(node.Key), "all keys", tree.KeysinString(true, blockHash))
 		} else {
 			if node.Item.Color == black {
 				node.Item.Color = nodeColor(child)
@@ -222,7 +222,7 @@ func (tree *Tree) Remove(key []byte, dryrun bool, blockHash common.Hash) {
 	}
 
 	tree.size--
-	log.Debug("Deleted node", "node key", hex.EncodeToString(node.Key), "all keys", tree.KeysinString(true, blockHash), "tree.size", tree.size)
+	//log.Debug("Deleted node", "node key", hex.EncodeToString(node.Key), "all keys", tree.KeysinString(true, blockHash), "tree.size", tree.size)
 }
 
 // // Empty returns true if tree does not contain any nodes
@@ -402,7 +402,7 @@ func output(tree *Tree, node *Node, prefix string, isTail bool, str *string, dry
 }
 
 func (tree *Tree) rotateLeft(node *Node, dryrun bool, blockHash common.Hash) {
-	log.Debug("Rotate left - before", "Root key", hex.EncodeToString(tree.Root(dryrun, blockHash).Key), "all keys", tree.KeysinString(true, blockHash))
+	//log.Debug("Rotate left - before", "Root key", hex.EncodeToString(tree.Root(dryrun, blockHash).Key), "all keys", tree.KeysinString(true, blockHash))
 	right := node.Right(tree, dryrun, blockHash)
 	tree.replaceNode(node, right, dryrun, blockHash)
 	node.RightKey(right.LeftKey())
@@ -415,11 +415,11 @@ func (tree *Tree) rotateLeft(node *Node, dryrun bool, blockHash common.Hash) {
 	node.ParentKey(right.Key)
 	tree.Save(node, dryrun, blockHash)
 	tree.Save(right, dryrun, blockHash)
-	log.Debug("Rotate left - after", "Root key", hex.EncodeToString(tree.Root(dryrun, blockHash).Key), "all keys", tree.KeysinString(true, blockHash))
+	//log.Debug("Rotate left - after", "Root key", hex.EncodeToString(tree.Root(dryrun, blockHash).Key), "all keys", tree.KeysinString(true, blockHash))
 }
 
 func (tree *Tree) rotateRight(node *Node, dryrun bool, blockHash common.Hash) {
-	log.Debug("Rotate right - before", "Root key", hex.EncodeToString(tree.Root(dryrun, blockHash).Key), "all keys", tree.KeysinString(true, blockHash))
+	//log.Debug("Rotate right - before", "Root key", hex.EncodeToString(tree.Root(dryrun, blockHash).Key), "all keys", tree.KeysinString(true, blockHash))
 	left := node.Left(tree, dryrun, blockHash)
 	tree.replaceNode(node, left, dryrun, blockHash)
 	node.LeftKey(left.RightKey())
@@ -432,11 +432,11 @@ func (tree *Tree) rotateRight(node *Node, dryrun bool, blockHash common.Hash) {
 	node.ParentKey(left.Key)
 	tree.Save(node, dryrun, blockHash)
 	tree.Save(left, dryrun, blockHash)
-	log.Debug("Rotate right - after", "Root key", hex.EncodeToString(tree.Root(dryrun, blockHash).Key), "all keys", tree.KeysinString(true, blockHash))
+	//log.Debug("Rotate right - after", "Root key", hex.EncodeToString(tree.Root(dryrun, blockHash).Key), "all keys", tree.KeysinString(true, blockHash))
 }
 
 func (tree *Tree) replaceNode(old *Node, new *Node, dryrun bool, blockHash common.Hash) {
-	log.Debug("Replace node", "old", old, "new", new)
+	//log.Debug("Replace node", "old", old, "new", new)
 
 	// we do not change any byte of Key so we can copy the reference to save directly to db
 	var newKey []byte
@@ -447,7 +447,7 @@ func (tree *Tree) replaceNode(old *Node, new *Node, dryrun bool, blockHash commo
 	}
 
 	if tree.IsEmptyKey(old.ParentKey()) {
-		log.Debug("Set root key - replaceNode", "key", hex.EncodeToString(newKey), "size", tree.size, "all keys", tree.KeysinString(true, blockHash))
+		//log.Debug("Set root key - replaceNode", "key", hex.EncodeToString(newKey), "size", tree.size, "all keys", tree.KeysinString(true, blockHash))
 		tree.rootKey = newKey
 	} else {
 		// update left and right for oldParent
@@ -473,7 +473,7 @@ func (tree *Tree) replaceNode(old *Node, new *Node, dryrun bool, blockHash commo
 }
 
 func (tree *Tree) insertCase1(node *Node, dryrun bool, blockHash common.Hash) {
-	log.Debug("Insert case 1", "node key", hex.EncodeToString(node.Key))
+	//log.Debug("Insert case 1", "node key", hex.EncodeToString(node.Key))
 	if tree.IsEmptyKey(node.ParentKey()) {
 		node.Item.Color = black
 	} else {
@@ -482,7 +482,7 @@ func (tree *Tree) insertCase1(node *Node, dryrun bool, blockHash common.Hash) {
 }
 
 func (tree *Tree) insertCase2(node *Node, dryrun bool, blockHash common.Hash) {
-	log.Debug("Insert case 2", "node key", hex.EncodeToString(node.Key))
+	//log.Debug("Insert case 2", "node key", hex.EncodeToString(node.Key))
 	parent := node.Parent(tree, dryrun, blockHash)
 	if nodeColor(parent) == black {
 		return
@@ -492,7 +492,7 @@ func (tree *Tree) insertCase2(node *Node, dryrun bool, blockHash common.Hash) {
 }
 
 func (tree *Tree) insertCase3(node *Node, dryrun bool, blockHash common.Hash) {
-	log.Debug("Insert case 3", "node key", hex.EncodeToString(node.Key))
+	//log.Debug("Insert case 3", "node key", hex.EncodeToString(node.Key))
 	parent := node.Parent(tree, dryrun, blockHash)
 	uncle := node.uncle(tree, dryrun, blockHash)
 	if nodeColor(uncle) == red {
@@ -512,7 +512,7 @@ func (tree *Tree) insertCase3(node *Node, dryrun bool, blockHash common.Hash) {
 }
 
 func (tree *Tree) insertCase4(node *Node, dryrun bool, blockHash common.Hash) {
-	log.Debug("Insert case 4", "node key", hex.EncodeToString(node.Key))
+	//log.Debug("Insert case 4", "node key", hex.EncodeToString(node.Key))
 	parent := node.Parent(tree, dryrun, blockHash)
 	grandparent := parent.Parent(tree, dryrun, blockHash)
 	tree.assertNotNull(grandparent, "grant parent")
@@ -536,7 +536,7 @@ func (tree *Tree) assertNotNull(node *Node, name string) {
 }
 
 func (tree *Tree) insertCase5(node *Node, dryrun bool, blockHash common.Hash) {
-	log.Debug("Insert case 5", "node key", hex.EncodeToString(node.Key))
+	//log.Debug("Insert case 5", "node key", hex.EncodeToString(node.Key))
 	parent := node.Parent(tree, dryrun, blockHash)
 	parent.Item.Color = black
 	tree.Save(parent, dryrun, blockHash)
@@ -557,12 +557,12 @@ func (tree *Tree) insertCase5(node *Node, dryrun bool, blockHash common.Hash) {
 }
 
 func (tree *Tree) Save(node *Node, dryrun bool, blockHash common.Hash) error {
-	log.Debug("Save node", "node", node, "key", hex.EncodeToString(node.Key))
+	//log.Debug("Save node", "node", node, "key", hex.EncodeToString(node.Key))
 	return tree.db.Put(node.Key, node.Item, dryrun, blockHash)
 }
 
 func (tree *Tree) deleteCase1(node *Node, dryrun bool, blockHash common.Hash) {
-	log.Debug("delete case 1", "node key", hex.EncodeToString(node.Key))
+	//log.Debug("delete case 1", "node key", hex.EncodeToString(node.Key))
 	if tree.IsEmptyKey(node.ParentKey()) {
 		//tree.deleteNode(node, dryrun, blockHash)
 		return
@@ -572,7 +572,7 @@ func (tree *Tree) deleteCase1(node *Node, dryrun bool, blockHash common.Hash) {
 }
 
 func (tree *Tree) deleteCase2(node *Node, dryrun bool, blockHash common.Hash) {
-	log.Debug("delete case 2", "node key", hex.EncodeToString(node.Key))
+	//log.Debug("delete case 2", "node key", hex.EncodeToString(node.Key))
 	parent := node.Parent(tree, dryrun, blockHash)
 	sibling := node.sibling(tree, dryrun, blockHash)
 
@@ -592,7 +592,7 @@ func (tree *Tree) deleteCase2(node *Node, dryrun bool, blockHash common.Hash) {
 }
 
 func (tree *Tree) deleteCase3(node *Node, dryrun bool, blockHash common.Hash) {
-	log.Debug("delete case 3", "node key", hex.EncodeToString(node.Key))
+	//log.Debug("delete case 3", "node key", hex.EncodeToString(node.Key))
 	parent := node.Parent(tree, dryrun, blockHash)
 	sibling := node.sibling(tree, dryrun, blockHash)
 	siblingLeft := sibling.Left(tree, dryrun, blockHash)
@@ -613,7 +613,7 @@ func (tree *Tree) deleteCase3(node *Node, dryrun bool, blockHash common.Hash) {
 }
 
 func (tree *Tree) deleteCase4(node *Node, dryrun bool, blockHash common.Hash) {
-	log.Debug("delete case 4", "node key", hex.EncodeToString(node.Key))
+	//log.Debug("delete case 4", "node key", hex.EncodeToString(node.Key))
 	parent := node.Parent(tree, dryrun, blockHash)
 	sibling := node.sibling(tree, dryrun, blockHash)
 	siblingLeft := sibling.Left(tree, dryrun, blockHash)
@@ -633,7 +633,7 @@ func (tree *Tree) deleteCase4(node *Node, dryrun bool, blockHash common.Hash) {
 }
 
 func (tree *Tree) deleteCase5(node *Node, dryrun bool, blockHash common.Hash) {
-	log.Debug("delete case 5", "node key", hex.EncodeToString(node.Key))
+	//log.Debug("delete case 5", "node key", hex.EncodeToString(node.Key))
 	parent := node.Parent(tree, dryrun, blockHash)
 	sibling := node.sibling(tree, dryrun, blockHash)
 	siblingLeft := sibling.Left(tree, dryrun, blockHash)
@@ -669,7 +669,7 @@ func (tree *Tree) deleteCase5(node *Node, dryrun bool, blockHash common.Hash) {
 }
 
 func (tree *Tree) deleteCase6(node *Node, dryrun bool, blockHash common.Hash) {
-	log.Debug("delete case 6", "node key", hex.EncodeToString(node.Key))
+	//log.Debug("delete case 6", "node key", hex.EncodeToString(node.Key))
 	parent := node.Parent(tree, dryrun, blockHash)
 	sibling := node.sibling(tree, dryrun, blockHash)
 	siblingLeft := sibling.Left(tree, dryrun, blockHash)
@@ -703,6 +703,6 @@ func nodeColor(node *Node) bool {
 }
 
 func (tree *Tree) deleteNode(node *Node, dryrun bool, blockHash common.Hash) {
-	log.Debug("Delete node", "node key", hex.EncodeToString(node.Key))
+	//log.Debug("Delete node", "node key", hex.EncodeToString(node.Key))
 	tree.db.Delete(node.Key, dryrun, blockHash)
 }

@@ -248,9 +248,7 @@ func (orderList *OrderList) RemoveOrder(order *Order, dryrun bool, blockHash com
 	}
 
 	nextOrder := orderList.GetOrder(order.Item.NextOrder, dryrun, blockHash)
-	log.Debug("Orderlist remove order debug", "nextOrder", nextOrder)
 	prevOrder := orderList.GetOrder(order.Item.PrevOrder, dryrun, blockHash)
-	log.Debug("Orderlist remove order debug", "prevOrder", prevOrder)
 
 	orderList.Item.Volume = Sub(orderList.Item.Volume, order.Item.Quantity)
 	orderList.Item.Length--
