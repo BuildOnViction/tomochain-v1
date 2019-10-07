@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/ethereum/go-ethereum/crypto"
 	"math/big"
 	"math/rand"
 	"os"
@@ -16,42 +17,48 @@ import (
 
 func buildOrder(nonce *big.Int) *OrderItem {
 	rand.Seed(time.Now().UTC().UnixNano())
-	v := []byte(string(rand.Intn(999)))
 	lstBuySell := []string{"BUY", "SELL"}
 	order := &OrderItem{
-		Quantity: new(big.Int).SetUint64(uint64(rand.Intn(9)+1) * 1000000000000000000),
-		Price:    new(big.Int).SetUint64(uint64(rand.Intn(9)+1) * 100000000000000000),
+		Quantity: big.NewInt(0).Mul(big.NewInt(int64(rand.Intn(10)+1)), ether),
+		Price:    big.NewInt(0).Mul(big.NewInt(int64(rand.Intn(10)+24000)), ether),
 		//Quantity: new(big.Int).SetUint64(uint64(5) * 1000000000000000000),
 		//Price:           new(big.Int).SetUint64(uint64(2) * 100000000000000000),
 		ExchangeAddress: common.HexToAddress("0x0D3ab14BBaD3D99F4203bd7a11aCB94882050E7e"),
-		UserAddress:     common.HexToAddress("0x9ca1514E3Dc4059C29a1608AE3a3E3fd35900888"),
+		UserAddress:     common.HexToAddress("0x17F2beD710ba50Ed27aEa52fc4bD7Bda5ED4a037"),
 		BaseToken:       common.HexToAddress("0x4d7eA2cE949216D6b120f3AA10164173615A2b6C"),
-		QuoteToken:      common.HexToAddress("0xC2fa1BA90b15E3612E0067A0020192938784D9C5"),
-		Status:          "New",
+		QuoteToken:      common.HexToAddress(common.TomoNativeAddress),
+		Status:          OrderStatusNew,
 		Side:            lstBuySell[rand.Int()%len(lstBuySell)],
-		//Side: "SELL",
-		Type:     Limit,
-		PairName: "BTC/ETH",
-		//Hash:            common.StringToHash("0xdc842ea4a239d1a4e56f1e7ba31aab5a307cb643a9f5b89f972f2f5f0d1e7587"),
-		Hash: common.StringToHash(nonce.String()),
-		Signature: &Signature{
-			V: v[0],
-			R: common.StringToHash("0xe386313e32a83eec20ecd52a5a0bd6bb34840416080303cecda556263a9270d0"),
-			S: common.StringToHash("0x05cd5304c5ead37b6fac574062b150db57a306fa591c84fc4c006c4155ebda2a"),
-		},
-		FilledAmount: new(big.Int).SetUint64(0),
-		Nonce:        nonce,
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		Type:            Limit,
+		PairName:        "BTC/TOMO",
+		FilledAmount:    new(big.Int).SetUint64(0),
+		Nonce:           nonce,
+		CreatedAt:       time.Now(),
+		UpdatedAt:       time.Now(),
 	}
 	return order
 }
 
 func testCreateOrder(t *testing.T, nonce *big.Int) {
 	order := buildOrder(nonce)
+	order.Hash = order.computeHash()
+
+	privKey, _ := crypto.HexToECDSA(os.Getenv("MAIN_ADDRESS_KEY"))
+	message := crypto.Keccak256(
+		[]byte("\x19Ethereum Signed Message:\n32"),
+		order.Hash.Bytes(),
+	)
+	signatureBytes, _ := crypto.Sign(message, privKey)
+	sig := &Signature{
+		R: common.BytesToHash(signatureBytes[0:32]),
+		S: common.BytesToHash(signatureBytes[32:64]),
+		V: signatureBytes[64] + 27,
+	}
+	order.Signature = sig
+
 	topic := order.BaseToken.Hex() + "::" + order.QuoteToken.Hex()
 	encodedTopic := fmt.Sprintf("0x%s", hex.EncodeToString([]byte(topic)))
-	fmt.Println("topic: ", encodedTopic)
+	fmt.Println("nonce: ", nonce.Uint64())
 
 	ipaddress := "0.0.0.0"
 	url := fmt.Sprintf("http://%s:8501", ipaddress)
@@ -86,10 +93,11 @@ func TestCreate10Orders(t *testing.T) {
 	//FIXME
 	// disable this test in travis CI
 	t.SkipNow()
-
-	for i := 1001; i <= 2000; i++ {
+	i := 1
+	for {
 		testCreateOrder(t, new(big.Int).SetUint64(uint64(i)))
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(2 * time.Second)
+		i++
 	}
 }
 
