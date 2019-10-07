@@ -89,7 +89,7 @@ func testCreateOrder(t *testing.T, nonce *big.Int) {
 	}
 }
 
-func TestCreate10Orders(t *testing.T) {
+func TestCreateOrders(t *testing.T) {
 	//FIXME
 	// disable this test in travis CI
 	t.SkipNow()
