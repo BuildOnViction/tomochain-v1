@@ -38,7 +38,7 @@ type OrderBookSnapshot struct {
 // snapshot of OrderTree
 type OrderTreeSnapshot struct {
 	OrderTreeItem []byte
-	OrderList     map[common.Hash]*OrderListSnapshot // common.BytesToHash(getKeyFromPrice(price)) => orderlist
+	OrderList     []*OrderListSnapshot
 }
 
 // snapshot of OrderList
@@ -104,14 +104,13 @@ func prepareOrderTreeData(tree *OrderTree) (*OrderTreeSnapshot, error) {
 	}
 	snap.OrderTreeItem = serializedTree
 
-	snap.OrderList = make(map[common.Hash]*OrderListSnapshot)
+	snap.OrderList = []*OrderListSnapshot{}
 	if !tree.NotEmpty() || tree.PriceTree.Size() == 0 {
 		return snap, nil
 	}
 
 	// foreach each price, snapshot its orderlist
 	for _, key := range tree.PriceTree.Keys(false, common.Hash{}) {
-		priceKeyHash := common.BytesToHash(key)
 		bytes, found := tree.PriceTree.Get(key, false, common.Hash{})
 		if found {
 			var ol *OrderList
@@ -135,10 +134,10 @@ func prepareOrderTreeData(tree *OrderTree) (*OrderTreeSnapshot, error) {
 				items = append(items, byteItem)
 				order = order.GetNextOrder(ol, false, common.Hash{})
 			}
-			snap.OrderList[priceKeyHash] = &OrderListSnapshot{
+			snap.OrderList = append(snap.OrderList, &OrderListSnapshot{
 				OrderListItem: bytes,
 				OrderItem:     items,
-			}
+			})
 		}
 	}
 	return snap, nil
@@ -248,14 +247,14 @@ func (s *Snapshot) RestoreOrderTree(treeSnap *OrderTreeSnapshot, tree *OrderTree
 		return tree, err
 	}
 	tree.Item = orderTreeItem
-	for _, olSnap := range treeSnap.OrderList {
+	for i, olSnap := range treeSnap.OrderList {
 		err = DecodeBytesItem(olSnap.OrderListItem, orderListItem)
 		if err != nil {
 			return tree, err
 		}
 		ol := NewOrderListWithItem(orderListItem, tree)
 		// orderlist hash from snapshot
-		orderListSnapHash := common.BytesToHash(treeSnap.OrderList[common.BytesToHash(ol.Key)].OrderListItem)
+		orderListSnapHash := common.BytesToHash(treeSnap.OrderList[i].OrderListItem)
 		if err = verifyHash(ol, orderListSnapHash); err != nil {
 			return tree, err
 		}
