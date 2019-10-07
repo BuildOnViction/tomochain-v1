@@ -444,8 +444,20 @@ func (orderTree *OrderTree) MinPriceList(dryrun bool, blockHash common.Hash) *Or
 	return nil
 }
 
-func (orderTree *OrderTree) Hash() (common.Hash, error) {
-	olEncoded, err := EncodeBytesItem(orderTree.Item)
+func (orderTree *OrderTree) Hash(dryrun bool, blockhash common.Hash) (common.Hash, error) {
+	allPriceKeys := orderTree.PriceTree.Keys(dryrun, blockhash)
+
+	olEncoded, err := EncodeBytesItem(struct {
+		Volume        []byte
+		NumOrders     uint64
+		PriceTreeSize uint64
+		AllPriceKeys  [][]byte
+	}{
+		orderTree.Item.Volume.Bytes(),
+		orderTree.Item.NumOrders,
+		orderTree.Item.PriceTreeSize,
+		allPriceKeys,
+	})
 	if err != nil {
 		return common.Hash{}, err
 	}

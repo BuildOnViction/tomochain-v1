@@ -147,7 +147,7 @@ func TestTomoX_Snapshot(t *testing.T) {
 	testDir := "TestTomoX_Snapshot"
 
 	tomox := &TomoX{
-		Orderbooks: map[string]*OrderBook{},
+		Orderbooks:  map[string]*OrderBook{},
 		activePairs: map[string]bool{},
 		db: NewLDBEngine(&Config{
 			DataDir:  testDir,
@@ -174,7 +174,9 @@ func TestTomoX_Snapshot(t *testing.T) {
 	if err := tomox.Snapshot(block); err != nil {
 		t.Error("Failed to store snapshot", "err", err, "block", block)
 	}
-
+	oldObHash, err := ob.Hash()
+	oldBidHash, err := ob.Bids.Hash(false, common.Hash{})
+	oldAskHash, err := ob.Asks.Hash(false, common.Hash{})
 
 	// after taking a snapshot
 	// delete some orders from database
@@ -182,13 +184,13 @@ func TestTomoX_Snapshot(t *testing.T) {
 	// remove order whose OrderId = 1 (bid order)
 	price := CloneBigInt(ether)
 	price = price.Mul(price, big.NewInt(99))
-	if err = ob.Bids.orderDB.Delete(ob.Bids.getKeyFromPrice(price),false, common.Hash{}); err != nil {
+	if err = ob.Bids.orderDB.Delete(ob.Bids.getKeyFromPrice(price), false, common.Hash{}); err != nil {
 		t.Error("Failed to delete order", "price", price)
 	}
 	// remove order whose OrderId = 4 (ask order)
 	price = CloneBigInt(ether)
 	price = price.Mul(price, big.NewInt(102))
-	if err = ob.Asks.orderDB.Delete(ob.Asks.getKeyFromPrice(price),false, common.Hash{}); err != nil {
+	if err = ob.Asks.orderDB.Delete(ob.Asks.getKeyFromPrice(price), false, common.Hash{}); err != nil {
 		t.Error("Failed to delete order", "price", price)
 	}
 
@@ -214,12 +216,8 @@ func TestTomoX_Snapshot(t *testing.T) {
 	}
 
 	// verify orderbook hash
-	hash, err := ob.Hash()
-	if err != nil {
-		t.Error(err)
-	}
 	var newOb *OrderBook
-	newOb, err = newSnap.RestoreOrderBookFromSnapshot(tomox.db, pair)
+	newOb, err = newSnap.RestoreOrderBookFromSnapshot(tomox.db, pair, false, common.Hash{})
 	if err != nil {
 		t.Error("Failed to restore orderbook from snapshot", err)
 	}
@@ -228,8 +226,8 @@ func TestTomoX_Snapshot(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if err != nil || newHash != hash {
-		t.Error("Wrong orderbook hash", "expected", hash, "actual", newHash)
+	if err != nil || newHash != oldObHash {
+		t.Error("Wrong orderbook hash", "expected", oldObHash, "actual", newHash)
 	}
 
 	var (
@@ -238,20 +236,18 @@ func TestTomoX_Snapshot(t *testing.T) {
 	)
 
 	// verify bid tree
-	hash, err = ob.Bids.Hash()
 
 	bidTree = newOb.Bids
-	treeHash, err = bidTree.Hash()
-	if err != nil || treeHash != hash {
-		t.Error("Wrong bid tree hash", "expected", hash, "actual", treeHash)
+	treeHash, err = bidTree.Hash(false, common.Hash{})
+	if err != nil || treeHash != oldBidHash {
+		t.Error("Wrong bid tree hash", "expected", oldBidHash, "actual", treeHash)
 	}
 
 	// verify ask tree
-	hash, err = ob.Asks.Hash()
 	askTree = newOb.Asks
-	treeHash, err = askTree.Hash()
-	if err != nil || treeHash != hash {
-		t.Error("Wrong ask tree hash", "expected", hash, "actual", treeHash)
+	treeHash, err = askTree.Hash(false, common.Hash{})
+	if err != nil || treeHash != oldAskHash {
+		t.Error("Wrong ask tree hash", "expected", oldAskHash, "actual", treeHash)
 	}
 
 	// verify bid order, orderId = 1, price = 99

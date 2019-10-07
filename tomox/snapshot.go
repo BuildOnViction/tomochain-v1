@@ -38,6 +38,7 @@ type OrderBookSnapshot struct {
 // snapshot of OrderTree
 type OrderTreeSnapshot struct {
 	OrderTreeItem []byte
+	OrderTreeHash common.Hash
 	OrderList     []*OrderListSnapshot
 }
 
@@ -78,10 +79,10 @@ func newSnapshot(tomox *TomoX, blockHash common.Hash) (*Snapshot, error) {
 			return snap, err
 		}
 		obSnap.OrderBookItem = encodedBytes
-		if bidTreeSnap, err = prepareOrderTreeData(ob.Bids); err != nil {
+		if bidTreeSnap, err = prepareOrderTreeData(ob.Bids, false, common.Hash{}); err != nil {
 			return snap, err
 		}
-		if askTreeSnap, err = prepareOrderTreeData(ob.Asks); err != nil {
+		if askTreeSnap, err = prepareOrderTreeData(ob.Asks, false, common.Hash{}); err != nil {
 			return snap, err
 		}
 		obSnap.Bids = bidTreeSnap
@@ -92,7 +93,7 @@ func newSnapshot(tomox *TomoX, blockHash common.Hash) (*Snapshot, error) {
 }
 
 // take a snapshot of orderTree
-func prepareOrderTreeData(tree *OrderTree) (*OrderTreeSnapshot, error) {
+func prepareOrderTreeData(tree *OrderTree, dryrun bool, blockhash common.Hash) (*OrderTreeSnapshot, error) {
 	var (
 		serializedTree []byte
 		err            error
@@ -140,6 +141,7 @@ func prepareOrderTreeData(tree *OrderTree) (*OrderTreeSnapshot, error) {
 			})
 		}
 	}
+	snap.OrderTreeHash, _ = tree.Hash(dryrun, blockhash)
 	return snap, nil
 }
 
@@ -163,7 +165,7 @@ func getSnapshot(db OrderDao, blockHash common.Hash) (*Snapshot, error) {
 }
 
 // import all orderbooks from snapshot
-func (s *Snapshot) RestoreOrderBookFromSnapshot(db OrderDao, pairName string) (*OrderBook, error) {
+func (s *Snapshot) RestoreOrderBookFromSnapshot(db OrderDao, pairName string, dryrun bool, blockhash common.Hash) (*OrderBook, error) {
 	var (
 		obSnap     *OrderBookSnapshot
 		bids, asks *OrderTree
@@ -190,22 +192,22 @@ func (s *Snapshot) RestoreOrderBookFromSnapshot(db OrderDao, pairName string) (*
 	ob.Bids = NewOrderTree(db, GetSegmentHash(key, 1, SlotSegment), ob)
 	ob.Asks = NewOrderTree(db, GetSegmentHash(key, 2, SlotSegment), ob)
 
-	if bids, err = s.RestoreOrderTree(obSnap.Bids, ob.Bids); err != nil {
+	if bids, err = s.RestoreOrderTree(obSnap.Bids, ob.Bids, dryrun, blockhash); err != nil {
 		return &OrderBook{}, err
 	}
-	if asks, err = s.RestoreOrderTree(obSnap.Asks, ob.Asks); err != nil {
+	if asks, err = s.RestoreOrderTree(obSnap.Asks, ob.Asks, dryrun, blockhash); err != nil {
 		return &OrderBook{}, err
 	}
 	ob.Bids = bids
 	ob.Asks = asks
 	// verify hash
-	if err = verifyHash(ob, common.BytesToHash(obSnap.OrderBookItem)); err != nil {
+	if err = verifyHash(ob, common.BytesToHash(obSnap.OrderBookItem), dryrun, blockhash); err != nil {
 		return &OrderBook{}, err
 	}
 	return ob, nil
 }
 
-func verifyHash(o interface{}, hash common.Hash) error {
+func verifyHash(o interface{}, hash common.Hash, dryrun bool, blockhash common.Hash) error {
 	var (
 		h   common.Hash
 		err error
@@ -218,7 +220,7 @@ func verifyHash(o interface{}, hash common.Hash) error {
 		}
 		break
 	case *OrderTree:
-		h, err = o.(*OrderTree).Hash()
+		h, err = o.(*OrderTree).Hash(dryrun, blockhash)
 		if h != hash {
 			return errInvalidTreeHash
 		}
@@ -237,7 +239,7 @@ func verifyHash(o interface{}, hash common.Hash) error {
 }
 
 // restore orderTree from snapshot
-func (s *Snapshot) RestoreOrderTree(treeSnap *OrderTreeSnapshot, tree *OrderTree) (*OrderTree, error) {
+func (s *Snapshot) RestoreOrderTree(treeSnap *OrderTreeSnapshot, tree *OrderTree, dryrun bool, blockhash common.Hash) (*OrderTree, error) {
 	var err error
 	orderTreeItem := &OrderTreeItem{}
 	orderListItem := &OrderListItem{}
@@ -255,7 +257,7 @@ func (s *Snapshot) RestoreOrderTree(treeSnap *OrderTreeSnapshot, tree *OrderTree
 		ol := NewOrderListWithItem(orderListItem, tree)
 		// orderlist hash from snapshot
 		orderListSnapHash := common.BytesToHash(treeSnap.OrderList[i].OrderListItem)
-		if err = verifyHash(ol, orderListSnapHash); err != nil {
+		if err = verifyHash(ol, orderListSnapHash, dryrun, blockhash); err != nil {
 			return tree, err
 		}
 		if err = tree.SaveOrderList(ol, false, common.Hash{}); err != nil {
@@ -275,7 +277,7 @@ func (s *Snapshot) RestoreOrderTree(treeSnap *OrderTreeSnapshot, tree *OrderTree
 		}
 
 	}
-	if err = verifyHash(tree, common.BytesToHash(treeSnap.OrderTreeItem)); err != nil {
+	if err = verifyHash(tree, treeSnap.OrderTreeHash, false, common.Hash{}); err != nil {
 		return tree, err
 	}
 	return tree, nil

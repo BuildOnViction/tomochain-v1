@@ -178,7 +178,7 @@ func (v *BlockValidator) validateMatchingOrder(tomoXService *tomox.TomoX, curren
 		}
 
 		// verify old state: orderbook hash, bidTree hash, askTree hash
-		if err := txMatch.VerifyOldTomoXState(ob); err != nil {
+		if err := txMatch.VerifyOldTomoXState(ob, true, blockHash); err != nil {
 			return err
 		}
 
@@ -188,7 +188,7 @@ func (v *BlockValidator) validateMatchingOrder(tomoXService *tomox.TomoX, curren
 		}
 
 		// verify new state
-		if err := txMatch.VerifyNewTomoXState(ob); err != nil {
+		if err := txMatch.VerifyNewTomoXState(ob, true, blockHash); err != nil {
 			return err
 		}
 	}
