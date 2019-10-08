@@ -7,6 +7,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"math/big"
 	"math/rand"
+	"net/http"
 	"os"
 	"testing"
 	"time"
@@ -18,11 +19,11 @@ import (
 func buildOrder(nonce *big.Int) *OrderItem {
 	rand.Seed(time.Now().UTC().UnixNano())
 	lstBuySell := []string{"BUY", "SELL"}
+	tomoPrice, _ := getPrice("tomochain", "btc")
+	btcPrice := int(1 / tomoPrice)
 	order := &OrderItem{
-		Quantity: big.NewInt(0).Mul(big.NewInt(int64(rand.Intn(10)+1)), ether),
-		Price:    big.NewInt(0).Mul(big.NewInt(int64(rand.Intn(10)+24000)), ether),
-		//Quantity: new(big.Int).SetUint64(uint64(5) * 1000000000000000000),
-		//Price:           new(big.Int).SetUint64(uint64(2) * 100000000000000000),
+		Quantity:        big.NewInt(0).Mul(big.NewInt(int64(rand.Intn(10)+1)), ether),
+		Price:           big.NewInt(0).Mul(big.NewInt(int64(rand.Intn(100)+btcPrice)), ether),
 		ExchangeAddress: common.HexToAddress("0x0D3ab14BBaD3D99F4203bd7a11aCB94882050E7e"),
 		UserAddress:     common.HexToAddress("0x17F2beD710ba50Ed27aEa52fc4bD7Bda5ED4a037"),
 		BaseToken:       common.HexToAddress("0x4d7eA2cE949216D6b120f3AA10164173615A2b6C"),
@@ -36,6 +37,7 @@ func buildOrder(nonce *big.Int) *OrderItem {
 		CreatedAt:       time.Now(),
 		UpdatedAt:       time.Now(),
 	}
+	fmt.Printf("price %v  ", order.Price)
 	return order
 }
 
@@ -99,6 +101,19 @@ func TestCreateOrders(t *testing.T) {
 		time.Sleep(2 * time.Second)
 		i++
 	}
+}
+
+func getPrice(base, quote string) (float32, error) {
+	resp, err := http.Get("https://api.coingecko.com/api/v3/simple/price?ids=" + base + "&vs_currencies=" + quote)
+	if err != nil {
+		return float32(0), fmt.Errorf(err.Error())
+	}
+	var data map[string]map[string]float32
+	err = json.NewDecoder(resp.Body).Decode(&data)
+	if err != nil {
+		return float32(0), fmt.Errorf(err.Error())
+	}
+	return data[base][quote], nil
 }
 
 func TestCancelOrder(t *testing.T) {
