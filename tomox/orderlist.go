@@ -242,14 +242,15 @@ func (orderList *OrderList) RemoveOrder(order *Order, dryrun bool, blockHash com
 		return nil
 	}
 
-	//remove order from DB
-	if err := orderList.DeleteOrder(order, dryrun, blockHash); err != nil {
-		return err
-	}
 
 	nextOrder := orderList.GetOrder(order.Item.NextOrder, dryrun, blockHash)
 	prevOrder := orderList.GetOrder(order.Item.PrevOrder, dryrun, blockHash)
 
+	//remove order from DB
+	if err := orderList.DeleteOrder(order, dryrun, blockHash); err != nil {
+		return err
+	}
+	
 	orderList.Item.Volume = Sub(orderList.Item.Volume, order.Item.Quantity)
 	orderList.Item.Length--
 
