@@ -835,9 +835,12 @@ func (tomox *TomoX) GetAsksTree(pairName string, dryrun bool, blockHash common.H
 }
 
 func (tomox *TomoX) ProcessOrderPending(pending map[common.Address]types.OrderTransactions, nearestDryrunCacheHash common.Hash) []TxDataMatch {
-	blockHash := common.StringToHash("COMMIT_NEW_WORK")
+	blockHash := M1DryrunCacheHash
 	txMatches := []TxDataMatch{}
-	tomox.db.InitDryRunMode(blockHash, nearestDryrunCacheHash)
+	if err := tomox.db.InitDryRunMode(blockHash, nearestDryrunCacheHash); err != nil {
+		log.Error("Can't init dryruncache to process order", "err", err)
+		return txMatches
+	}
 	defer tomox.db.DropDryrunCache(blockHash)
 
 	log.Debug("Get pending orders to process")
@@ -890,25 +893,25 @@ func (tomox *TomoX) ProcessOrderPending(pending map[common.Address]types.OrderTr
 				continue
 			}
 
-						log.Info("Process order pending", "orderPending", order)
-						obOld, err := ob.Hash()
-						if err != nil {
-							log.Error("Fail to get orderbook hash old", "err", err)
-							continue
-						}
-						askOld, err := ob.Asks.Hash(true, blockHash)
-						if err != nil {
-							log.Error("Fail to get ask tree hash old", "err", err)
-							continue
-						}
-						bidOld, err := ob.Bids.Hash(true, blockHash)
-						if err != nil {
-							log.Error("Fail to get bid tree hash old", "err", err)
-							continue
-						}
-						originalOrder := &OrderItem{}
-						*originalOrder = *order
-						originalOrder.Quantity = CloneBigInt(order.Quantity)
+			log.Info("Process order pending", "orderPending", order)
+			obOld, err := ob.Hash()
+			if err != nil {
+				log.Error("Fail to get orderbook hash old", "err", err)
+				continue
+			}
+			askOld, err := ob.Asks.Hash(true, blockHash)
+			if err != nil {
+				log.Error("Fail to get ask tree hash old", "err", err)
+				continue
+			}
+			bidOld, err := ob.Bids.Hash(true, blockHash)
+			if err != nil {
+				log.Error("Fail to get bid tree hash old", "err", err)
+				continue
+			}
+			originalOrder := &OrderItem{}
+			*originalOrder = *order
+			originalOrder.Quantity = CloneBigInt(order.Quantity)
 
 			if cancel {
 				order.Status = OrderStatusCancelled
@@ -916,25 +919,25 @@ func (tomox *TomoX) ProcessOrderPending(pending map[common.Address]types.OrderTr
 
 			trades, _, err := ob.ProcessOrder(order, true, true, blockHash)
 
-						if err != nil {
-							log.Error("Can't process order", "order", order, "err", err)
-							continue
-						}
-						obNew, err := ob.Hash()
-						if err != nil {
-							log.Error("Fail to get orderbook hash new", "err", err)
-							continue
-						}
-						askNew, err := ob.Asks.Hash(true, blockHash)
-						if err != nil {
-							log.Error("Fail to get ask tree hash new", "err", err)
-							continue
-						}
-						bidNew, err := ob.Bids.Hash(true, blockHash)
-						if err != nil {
-							log.Error("Fail to get bid tree hash new", "err", err)
-							continue
-						}
+			if err != nil {
+				log.Error("Can't process order", "order", order, "err", err)
+				continue
+			}
+			obNew, err := ob.Hash()
+			if err != nil {
+				log.Error("Fail to get orderbook hash new", "err", err)
+				continue
+			}
+			askNew, err := ob.Asks.Hash(true, blockHash)
+			if err != nil {
+				log.Error("Fail to get ask tree hash new", "err", err)
+				continue
+			}
+			bidNew, err := ob.Bids.Hash(true, blockHash)
+			if err != nil {
+				log.Error("Fail to get bid tree hash new", "err", err)
+				continue
+			}
 
 			// orderID has been updated
 			originalOrder.OrderID = order.OrderID

@@ -216,9 +216,10 @@ func (db *MongoDatabase) Delete(key []byte, dryrun bool, blockHash common.Hash) 
 	return nil
 }
 
-func (db *MongoDatabase) InitDryRunMode(blockHashNoValidator, parentHashNoValidator common.Hash) {
+func (db *MongoDatabase) InitDryRunMode(blockHashNoValidator, parentHashNoValidator common.Hash) error {
 	// SDK node (which running with mongodb) doesn't run Matching engine
 	// dry-run cache is useless for sdk node
+	return nil
 }
 
 func (db *MongoDatabase) SaveDryRunResult(hash common.Hash) error {

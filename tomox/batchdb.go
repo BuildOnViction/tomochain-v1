@@ -16,7 +16,7 @@ import (
 
 const (
 	defaultCacheLimit = 1024000
-	dryrunCacheLimit = 200
+	dryrunCacheLimit  = 200
 )
 
 type BatchItem struct {
@@ -271,10 +271,14 @@ func (db *BatchDatabase) InitDryRunMode(blockHashNoValidator, parentCacheHash co
 
 				}
 			}
+		} else {
+			return fmt.Errorf("can't found parentCache . blockhash: %v .ParentCache %v", blockHashNoValidator, parentCacheHash)
 		}
 	}
 	db.dryRunCaches[blockHashNoValidator] = dryrunCache
-	db.recentCaches = append(db.recentCaches, blockHashNoValidator)
+	if blockHashNoValidator != M1DryrunCacheHash {
+		db.recentCaches = append(db.recentCaches, blockHashNoValidator)
+	}
 	return nil
 }
 

@@ -45,6 +45,8 @@ var (
 )
 
 var (
+	M1DryrunCacheHash = common.StringToHash("COMMIT_NEW_WORK")
+
 	// errors
 	ErrUnsupportedEngine    = errors.New("only POSV supports matching orders")
 	ErrTomoXServiceNotFound = errors.New("can't attach tomoX service")
