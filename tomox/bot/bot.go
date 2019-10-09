@@ -48,7 +48,7 @@ func buildOrder() *tomox.OrderItem {
 	return order
 }
 
-func createOrder(rpcClient *rpc.Client) {
+func createOrder(rpcClient *rpc.Client) error {
 	order := buildOrder()
 	order.Nonce = big.NewInt(0).Add(getOrderNonce(rpcClient, order.UserAddress), big.NewInt(1))
 	order.Hash = computeHash(order)
@@ -75,19 +75,20 @@ func createOrder(rpcClient *rpc.Client) {
 	params["topic"] = encodedTopic
 	err := rpcClient.Call(&result, "tomox_newTopic", params)
 	if err != nil {
-		fmt.Errorf("rpcClient.Call tomox_newTopic failed", "err", err)
+		return fmt.Errorf("rpcClient.Call tomox_newTopic failed %v", err)
 	}
 
 	//create new order
 	params["payload"], err = json.Marshal(order)
 	if err != nil {
-		fmt.Errorf("json.Marshal failed", "err", err)
+		return fmt.Errorf("json.Marshal failed %v", err)
 	}
 
 	err = rpcClient.Call(&result, "tomox_createOrder", params)
 	if err != nil {
-		fmt.Errorf("rpcClient.Call tomox_createOrder failed", "err", err)
+		return fmt.Errorf("rpcClient.Call tomox_createOrder failed %v", err)
 	}
+	return nil
 }
 
 func main() {
@@ -96,10 +97,14 @@ func main() {
 	rpcClient, err := rpc.DialHTTP(rpcEndpoint)
 	defer rpcClient.Close()
 	if err != nil {
-		fmt.Errorf("rpc.DialHTTP failed", "err", err)
+		fmt.Println("rpc.DialHTTP failed", "err", err)
+		os.Exit(1)
 	}
 	for {
-		createOrder(rpcClient)
+		if err := createOrder(rpcClient); err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
 		time.Sleep(10 * time.Second)
 	}
 }
