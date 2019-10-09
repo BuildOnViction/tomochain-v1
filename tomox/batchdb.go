@@ -3,6 +3,7 @@ package tomox
 import (
 	"bytes"
 	"encoding/hex"
+	"fmt"
 	"reflect"
 	"sync"
 
@@ -82,15 +83,16 @@ func (db *BatchDatabase) Has(key []byte, dryrun bool, blockHash common.Hash) (bo
 	if dryrun {
 		db.lock.Lock()
 		dryrunCache, ok := db.dryRunCaches[blockHash]
-		db.lock.Unlock()
 		if ok && dryrunCache.Len() > 0 {
 			if val, ok := dryrunCache.Get(cacheKey); ok {
+				defer db.lock.Unlock()
 				if val == nil {
 					return false, nil
 				}
 				return true, nil
 			}
 		}
+		db.lock.Unlock()
 	} else if db.cacheItems.Contains(cacheKey) {
 		// for dry-run mode, do not read cacheItems
 		return true, nil
@@ -109,15 +111,16 @@ func (db *BatchDatabase) Get(key []byte, val interface{}, dryrun bool, blockHash
 	if dryrun {
 		db.lock.Lock()
 		dryrunCache, ok := db.dryRunCaches[blockHash]
-		db.lock.Unlock()
 		if ok && dryrunCache.Len() > 0 {
 			if value, ok := dryrunCache.Get(cacheKey); ok {
+				defer db.lock.Unlock()
 				if value == nil {
 					log.Debug("Key not found in dryruncache", "key", hex.EncodeToString(key), "blockhash", blockHash.Hex())
 				}
 				return value, nil
 			}
 		}
+		db.lock.Unlock()
 	}
 
 	// for dry-run mode, do not read cacheItems
@@ -154,16 +157,13 @@ func (db *BatchDatabase) Put(key []byte, val interface{}, dryrun bool, blockHash
 	cacheKey := db.getCacheKey(key)
 	if dryrun {
 		db.lock.Lock()
-		dryrunCache, _ := db.dryRunCaches[blockHash]
-		db.lock.Unlock()
-		if dryrunCache == nil {
-			log.Debug("BatchDB - Put: DryrunCache of this block is not initialized. Initialize now!", "blockHash", blockHash)
-			db.InitDryRunMode(blockHash, common.Hash{})
-			db.lock.Lock()
-			dryrunCache, _ = db.dryRunCaches[blockHash]
+		dryrunCache, ok := db.dryRunCaches[blockHash]
+		if !ok || dryrunCache == nil {
 			db.lock.Unlock()
+			return fmt.Errorf("dryruncache not found %v", blockHash)
 		}
 		dryrunCache.Add(cacheKey, val)
+		db.lock.Unlock()
 		return nil
 	}
 
@@ -184,15 +184,12 @@ func (db *BatchDatabase) Delete(key []byte, dryrun bool, blockHash common.Hash) 
 	if dryrun {
 		db.lock.Lock()
 		dryrunCache, ok := db.dryRunCaches[blockHash]
-		db.lock.Unlock()
-		if !ok {
-			log.Debug("BatchDB - Delete: DryrunCache of this block is not initialized. Initialize now!", "blockHash", blockHash)
-			db.InitDryRunMode(blockHash, common.Hash{})
-			db.lock.Lock()
-			dryrunCache, _ = db.dryRunCaches[blockHash]
+		if !ok || dryrunCache == nil {
 			db.lock.Unlock()
+			return fmt.Errorf("dryruncache not found %v", blockHash)
 		}
 		dryrunCache.Add(cacheKey, nil)
+		db.lock.Unlock()
 		return nil
 	}
 
@@ -200,30 +197,29 @@ func (db *BatchDatabase) Delete(key []byte, dryrun bool, blockHash common.Hash) 
 	return db.db.Delete(key)
 }
 
-func (db *BatchDatabase) InitDryRunMode(blockHashNoValidator, parentHashNoValidator common.Hash) {
+func (db *BatchDatabase) InitDryRunMode(blockHashNoValidator, parentCacheHash common.Hash) error {
 	if len(db.recentCaches) >= dryrunCacheLimit {
 		db.DropDryrunCache(db.recentCaches[0])
+		db.lock.Lock()
 		db.recentCaches = db.recentCaches[1:]
+		db.lock.Unlock()
 	}
-	log.Debug("Start dry-run mode, clear old data", "blockhash", blockHashNoValidator, "parent", parentHashNoValidator)
-	db.lock.Lock()
-	dryrunCache, ok := db.dryRunCaches[blockHashNoValidator]
-	db.lock.Unlock()
 
-	// if the dryrunCache of this blockHash already existed, purge it
-	// otherwise, initialize new cache for it
+	// initialize new cache for it
 	// then copy all changes from parent cache
 	// Finally, assign the cache to db.dryRunCaches
-	if ok && dryrunCache != nil {
-		dryrunCache.Purge()
-	} else {
-		dryrunCache, _ = lru.New(db.cacheLimit)
+	db.DropDryrunCache(blockHashNoValidator)
+	log.Debug("Initialized new dryruncache", "blockhash", blockHashNoValidator, "parent", parentCacheHash)
+	dryrunCache, err := lru.New(db.cacheLimit)
+	if err != nil || dryrunCache == nil {
+		return fmt.Errorf("can't initialize dryruncache. blockhash: %v. err: %v", blockHashNoValidator, err)
 	}
-	if parentHashNoValidator != (common.Hash{}) {
-		db.lock.Lock()
+	db.lock.Lock()
+	defer db.lock.Unlock()
+
+	if parentCacheHash != (common.Hash{}) {
 		// copy all changes from parent
-		parentCache, ok := db.dryRunCaches[parentHashNoValidator]
-		db.lock.Unlock()
+		parentCache, ok := db.dryRunCaches[parentCacheHash]
 		if ok && parentCache.Len() > 0 {
 			for _, cacheKey := range parentCache.Keys() {
 				val, ok := parentCache.Get(cacheKey)
@@ -235,27 +231,37 @@ func (db *BatchDatabase) InitDryRunMode(blockHashNoValidator, parentHashNoValida
 						switch val.(type) {
 						case *Item:
 							value := &Item{}
-							DecodeBytesItem(encoded, value)
+							if err := DecodeBytesItem(encoded, value); err != nil {
+								return fmt.Errorf("can't inherit from the nearest dryruncache. blockhash: %v. ParentCache: %v .err: %v", blockHashNoValidator, parentCacheHash, err)
+							}
 							dryrunCache.Add(cacheKey, value)
 							break
 						case *OrderItem:
 							value := &OrderItem{}
-							DecodeBytesItem(encoded, value)
+							if err := DecodeBytesItem(encoded, value); err != nil {
+								return fmt.Errorf("can't inherit from the nearest dryruncache. blockhash: %v. ParentCache: %v .err: %v", blockHashNoValidator, parentCacheHash, err)
+							}
 							dryrunCache.Add(cacheKey, value)
 							break
 						case *OrderListItem:
 							value := &OrderListItem{}
-							DecodeBytesItem(encoded, value)
+							if err := DecodeBytesItem(encoded, value); err != nil {
+								return fmt.Errorf("can't inherit from the nearest dryruncache. blockhash: %v. ParentCache: %v .err: %v", blockHashNoValidator, parentCacheHash, err)
+							}
 							dryrunCache.Add(cacheKey, value)
 							break
 						case *OrderTreeItem:
 							value := &OrderTreeItem{}
-							DecodeBytesItem(encoded, value)
+							if err := DecodeBytesItem(encoded, value); err != nil {
+								return fmt.Errorf("can't inherit from the nearest dryruncache. blockhash: %v. ParentCache: %v .err: %v", blockHashNoValidator, parentCacheHash, err)
+							}
 							dryrunCache.Add(cacheKey, value)
 							break
 						case *OrderBookItem:
 							value := &OrderBookItem{}
-							DecodeBytesItem(encoded, value)
+							if err := DecodeBytesItem(encoded, value); err != nil {
+								return fmt.Errorf("can't inherit from the nearest dryruncache. blockhash: %v. ParentCache: %v .err: %v", blockHashNoValidator, parentCacheHash, err)
+							}
 							dryrunCache.Add(cacheKey, value)
 							break
 						}
@@ -267,22 +273,17 @@ func (db *BatchDatabase) InitDryRunMode(blockHashNoValidator, parentHashNoValida
 			}
 		}
 	}
-	db.lock.Lock()
 	db.dryRunCaches[blockHashNoValidator] = dryrunCache
 	db.recentCaches = append(db.recentCaches, blockHashNoValidator)
-	db.lock.Unlock()
+	return nil
 }
 
 func (db *BatchDatabase) SaveDryRunResult(blockHash common.Hash) error {
 	log.Debug("Start saving dry-run result to DB ", "blockhash", blockHash)
-	defer func() {
-		db.lock.Lock()
-		delete(db.dryRunCaches, blockHash)
-		db.lock.Unlock()
-	}()
 	db.lock.Lock()
+	defer db.lock.Unlock()
+
 	dryrunCache, ok := db.dryRunCaches[blockHash]
-	db.lock.Unlock()
 	if !ok || dryrunCache.Len() == 0 {
 		log.Debug("Nothing to SaveDryRunResult. DryrunCache is empty.", "blockhash", blockHash)
 		return nil
@@ -327,8 +328,8 @@ func (db *BatchDatabase) SaveDryRunResult(blockHash common.Hash) error {
 
 func (db *BatchDatabase) HasDryrunCache(blockhash common.Hash) bool {
 	db.lock.Lock()
+	defer db.lock.Unlock()
 	cache, ok := db.dryRunCaches[blockhash]
-	db.lock.Unlock()
 	if ok && cache.Len() > 0 {
 		return true
 	}
@@ -338,12 +339,12 @@ func (db *BatchDatabase) HasDryrunCache(blockhash common.Hash) bool {
 func (db *BatchDatabase) DropDryrunCache(blockhash common.Hash) {
 	log.Debug("DropdryrunCache", "blockhash", blockhash)
 	db.lock.Lock()
+	defer db.lock.Unlock()
 	cache, ok := db.dryRunCaches[blockhash]
-	delete(db.dryRunCaches, blockhash)
-	db.lock.Unlock()
 	if ok && cache != nil {
 		cache.Purge()
 	}
+	delete(db.dryRunCaches, blockhash)
 }
 
 func (db *BatchDatabase) DeleteTxMatchByTxHash(txhash common.Hash) error {

@@ -2135,6 +2135,9 @@ func (bc *BlockChain) reorgTomox(block *types.Block, oldChain, newChain types.Bl
 		// Apply new chain
 		for i := len(newChain) - 1; i >= 0; i-- {
 			newBlock := newChain[i]
+			if err := bc.validator.ValidateBody(newBlock); err != nil {
+				return err
+			}
 			txMatchBatchData, err := ExtractMatchingTransactions(newBlock.Transactions())
 			if err != nil {
 				return err
@@ -2223,7 +2226,6 @@ func (bc *BlockChain) LoadTomoxStateAtBlock(tomoXService *tomox.TomoX, block *ty
 	}
 	for i := len(gapChain) - 1; i >= 0; i-- {
 		b := gapChain[i]
-		log.Debug("Rollback tomox states to block", "number", b.NumberU64(), "hash", b.Hash())
 		if b.NumberU64()%tomox.SnapshotInterval == 0 {
 			nearestDryrunCacheHash := bc.FindNearestDryrunCache(tomoXService, b)
 			log.Debug("From LoadTomoxStateAtBlock: Periodically save dryruncache to DB", "nearestDryrunCacheHash", nearestDryrunCacheHash)
