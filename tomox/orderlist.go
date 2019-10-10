@@ -190,7 +190,7 @@ func (orderList *OrderList) OrderExist(key []byte, dryrun bool, blockHash common
 
 func (orderList *OrderList) SaveOrder(order *Order, dryrun bool, blockHash common.Hash) error {
 	key := orderList.GetOrderID(order)
-	log.Debug("Save order ", "key", hex.EncodeToString(key), "value", ToJSON(order.Item))
+	log.Debug("Save order ", "key", hex.EncodeToString(key), "value", order.Item)
 
 	return orderList.orderTree.orderDB.Put(key, order.Item, dryrun, blockHash)
 }

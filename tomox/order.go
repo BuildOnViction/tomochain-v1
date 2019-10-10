@@ -109,8 +109,15 @@ func (order *Order) GetPrevOrder(orderList *OrderList, dryrun bool, blockHash co
 // NewOrder : create new order with quote ( can be ethereum address )
 func NewOrder(orderItem *OrderItem, orderListKey []byte) *Order {
 	key := GetKeyFromBig(new(big.Int).SetUint64(orderItem.OrderID))
-	orderItem.NextOrder = EmptyKey()
-	orderItem.PrevOrder = EmptyKey()
+	// if PrevOrder, NextOrder are already set, keep them
+	// when order is loaded from snapshot, they should be set
+	// we should not reset to emptyKey in order not to break this link list
+	if orderItem.NextOrder == nil {
+		orderItem.NextOrder = EmptyKey()
+	}
+	if orderItem.PrevOrder == nil {
+		orderItem.PrevOrder = EmptyKey()
+	}
 	orderItem.OrderList = orderListKey
 	// key should be Hash for compatible with smart contract
 	order := &Order{

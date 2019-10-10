@@ -381,7 +381,7 @@ func (orderBook *OrderBook) processOrderList(side string, orderList *OrderList, 
 		if headOrder == nil {
 			return nil, nil, nil, fmt.Errorf("headOrder is null")
 		}
-		log.Debug("Get head order in the orderlist", "headOrder", headOrder.Item)
+		log.Debug("Get head order in the orderlist", "headOrder", headOrder, "prev", headOrder.Item.PrevOrder, "next", headOrder.Item.NextOrder)
 
 		tradedPrice := CloneBigInt(headOrder.Item.Price)
 
