@@ -72,7 +72,7 @@ func (o *OrderItem) verifyRelayer(state *state.StateDB) error {
 }
 
 // following: https://github.com/tomochain/tomox-sdk/blob/master/types/order.go#L125
-func (o *OrderItem) computeHash() common.Hash {
+func (o *OrderItem) ComputeHash() common.Hash {
 	sha := sha3.NewKeccak256()
 	sha.Write(o.ExchangeAddress.Bytes())
 	sha.Write(o.UserAddress.Bytes())
@@ -95,7 +95,7 @@ func (o *OrderItem) verifySignature() error {
 		hash common.Hash
 		err  error
 	)
-	hash = o.computeHash()
+	hash = o.ComputeHash()
 	if hash != o.Hash {
 		log.Debug("Wrong orderhash", "expected", hex.EncodeToString(o.Hash.Bytes()), "actual", hex.EncodeToString(hash.Bytes()))
 		return errWrongHash

@@ -77,7 +77,7 @@ func TestOrderItem_VerifyBasicOrderInfo(t *testing.T) {
 	order.UserAddress = addr
 
 	// set valid hash
-	order.Hash = order.computeHash()
+	order.Hash = order.ComputeHash()
 
 	signatureBytes, _ := crypto.Sign(common.StringToHash("invalid hash").Bytes(), privKey)
 	sig := &Signature{

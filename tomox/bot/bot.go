@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/crypto/sha3"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/ethereum/go-ethereum/tomox"
 	"math/big"
@@ -52,7 +51,7 @@ func buildOrder(userAddr string) *tomox.OrderItem {
 func createOrder(rpcClient *rpc.Client, userAddr, pk string) error {
 	order := buildOrder(userAddr)
 	order.Nonce = big.NewInt(0).Add(getOrderNonce(rpcClient, order.UserAddress), big.NewInt(1))
-	order.Hash = computeHash(order)
+	order.Hash = order.ComputeHash()
 
 	privKey, _ := crypto.HexToECDSA(pk)
 	message := crypto.Keccak256(
@@ -133,23 +132,3 @@ func getOrderNonce(rpcClient *rpc.Client, addr common.Address) *big.Int {
 	return big.NewInt(nonce)
 }
 
-func computeHash(o *tomox.OrderItem) common.Hash {
-	sha := sha3.NewKeccak256()
-	sha.Write(o.ExchangeAddress.Bytes())
-	sha.Write(o.UserAddress.Bytes())
-	sha.Write(o.BaseToken.Bytes())
-	sha.Write(o.QuoteToken.Bytes())
-	sha.Write(common.BigToHash(o.Quantity).Bytes())
-	if o.Price != nil {
-		sha.Write(common.BigToHash(o.Price).Bytes())
-	}
-	if o.Side == tomox.Bid {
-		sha.Write(common.BigToHash(big.NewInt(0)).Bytes())
-	} else {
-		sha.Write(common.BigToHash(big.NewInt(1)).Bytes())
-	}
-	sha.Write(common.BigToHash(o.Nonce).Bytes())
-	sha.Write(common.StringToHash(o.Status).Bytes())
-	sha.Write(common.StringToHash(o.Type).Bytes())
-	return common.BytesToHash(sha.Sum(nil))
-}

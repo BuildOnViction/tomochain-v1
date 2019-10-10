@@ -43,7 +43,7 @@ func buildOrder(nonce *big.Int) *OrderItem {
 
 func testCreateOrder(t *testing.T, nonce *big.Int) {
 	order := buildOrder(nonce)
-	order.Hash = order.computeHash()
+	order.Hash = order.ComputeHash()
 
 	privKey, _ := crypto.HexToECDSA(os.Getenv("MAIN_ADDRESS_KEY"))
 	message := crypto.Keccak256(
