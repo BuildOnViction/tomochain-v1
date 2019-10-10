@@ -18,12 +18,13 @@ import (
 	"time"
 )
 
-var (
-	userAddr = common.HexToAddress("0x17F2beD710ba50Ed27aEa52fc4bD7Bda5ED4a037")
-	PK       = os.Getenv("MAIN_ADDRESS_KEY")
-)
+//
+//var (
+//	userAddr = common.HexToAddress("0x17F2beD710ba50Ed27aEa52fc4bD7Bda5ED4a037")
+//	PK       = os.Getenv("MAIN_ADDRESS_KEY")
+//)
 
-func buildOrder() *tomox.OrderItem {
+func buildOrder(userAddr string) *tomox.OrderItem {
 	var ether = big.NewInt(1000000000000000000)
 	rand.Seed(time.Now().UTC().UnixNano())
 	lstBuySell := []string{"BUY", "SELL"}
@@ -31,9 +32,9 @@ func buildOrder() *tomox.OrderItem {
 	btcPrice := int(1 / tomoPrice)
 	order := &tomox.OrderItem{
 		Quantity:        big.NewInt(0).Mul(big.NewInt(int64(rand.Intn(10)+1)), ether),
-		Price:           big.NewInt(0).Mul(big.NewInt(int64(rand.Intn(100)+btcPrice)), ether),
+		Price:           big.NewInt(0).Mul(big.NewInt(int64(rand.Intn(10)+btcPrice)), ether),
 		ExchangeAddress: common.HexToAddress("0x0D3ab14BBaD3D99F4203bd7a11aCB94882050E7e"),
-		UserAddress:     userAddr,
+		UserAddress:     common.HexToAddress(userAddr),
 		BaseToken:       common.HexToAddress("0x4d7eA2cE949216D6b120f3AA10164173615A2b6C"),
 		QuoteToken:      common.HexToAddress(common.TomoNativeAddress),
 		Status:          tomox.OrderStatusNew,
@@ -48,12 +49,12 @@ func buildOrder() *tomox.OrderItem {
 	return order
 }
 
-func createOrder(rpcClient *rpc.Client) error {
-	order := buildOrder()
+func createOrder(rpcClient *rpc.Client, userAddr, pk string) error {
+	order := buildOrder(userAddr)
 	order.Nonce = big.NewInt(0).Add(getOrderNonce(rpcClient, order.UserAddress), big.NewInt(1))
 	order.Hash = computeHash(order)
 
-	privKey, _ := crypto.HexToECDSA(PK)
+	privKey, _ := crypto.HexToECDSA(pk)
 	message := crypto.Keccak256(
 		[]byte("\x19Ethereum Signed Message:\n32"),
 		order.Hash.Bytes(),
@@ -101,7 +102,7 @@ func main() {
 		os.Exit(1)
 	}
 	for {
-		if err := createOrder(rpcClient); err != nil {
+		if err := createOrder(rpcClient, os.Args[1], os.Args[2]); err != nil {
 			fmt.Println(err)
 			os.Exit(1)
 		}
