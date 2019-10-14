@@ -428,10 +428,10 @@ func ApplyTomoXMatchedTransaction(config *params.ChainConfig, bc *BlockChain, st
 	receipt.GasUsed = gasUsed.Uint64()
 	// if the transaction created a contract, store the creation address in the receipt.
 	// Set the receipt logs and create a bloom for filtering
-	log := &types.Log{}
-	log.Address = common.HexToAddress(common.BlockSigners)
-	log.BlockNumber = header.Number.Uint64()
-	statedb.AddLog(log)
+	stateLog := &types.Log{}
+	stateLog.Address = common.HexToAddress(common.TomoXAddr)
+	stateLog.BlockNumber = header.Number.Uint64()
+	statedb.AddLog(stateLog)
 	receipt.Logs = statedb.GetLogs(tx.Hash())
 	receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
 	return receipt, 0, nil, false
