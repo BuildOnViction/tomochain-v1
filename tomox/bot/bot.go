@@ -1,11 +1,11 @@
 package main
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/crypto/sha3"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/ethereum/go-ethereum/tomox"
 	"math/big"
@@ -22,6 +22,36 @@ import (
 //	userAddr = common.HexToAddress("0x17F2beD710ba50Ed27aEa52fc4bD7Bda5ED4a037")
 //	PK       = os.Getenv("MAIN_ADDRESS_KEY")
 //)
+
+const (
+	createOrderApi = "tomox_sendOrder"
+	getOrderNonceApi = "tomox_getOrderNonce"
+	coingeckoApi = "https://api.coingecko.com/api/v3/simple/price?ids="
+	rpcEndpoint    = "http://127.0.0.1:1545"
+)
+var nonce = int64(0)
+
+type OrderMsg struct {
+	AccountNonce    uint64         `json:"nonce"    gencodec:"required"`
+	Quantity        *big.Int       `json:"quantity,omitempty"`
+	Price           *big.Int       `json:"price,omitempty"`
+	ExchangeAddress common.Address `json:"exchangeAddress,omitempty"`
+	UserAddress     common.Address `json:"userAddress,omitempty"`
+	BaseToken       common.Address `json:"baseToken,omitempty"`
+	QuoteToken      common.Address `json:"quoteToken,omitempty"`
+	Status          string         `json:"status,omitempty"`
+	Side            string         `json:"side,omitempty"`
+	Type            string         `json:"type,omitempty"`
+	PairName        string         `json:"pairName,omitempty"`
+	OrderID         uint64         `json:"orderid,omitempty"`
+	// Signature values
+	V *big.Int `json:"v" gencodec:"required"`
+	R *big.Int `json:"r" gencodec:"required"`
+	S *big.Int `json:"s" gencodec:"required"`
+
+	// This is only used when marshaling to JSON.
+	Hash common.Hash `json:"hash" rlp:"-"`
+}
 
 func buildOrder(userAddr string) *tomox.OrderItem {
 	var ether = big.NewInt(1000000000000000000)
@@ -50,9 +80,11 @@ func buildOrder(userAddr string) *tomox.OrderItem {
 
 func createOrder(rpcClient *rpc.Client, userAddr, pk string) error {
 	order := buildOrder(userAddr)
-	order.Nonce = big.NewInt(0).Add(getOrderNonce(rpcClient, order.UserAddress), big.NewInt(1))
-	order.Hash = order.ComputeHash()
+	order.Nonce = big.NewInt(nonce) //getOrderNonce(rpcClient, order.UserAddress)
+	nonce++
+	order.Hash = computeHash(order)
 
+	fmt.Println("order info", tomox.ToJSON(order))
 	privKey, _ := crypto.HexToECDSA(pk)
 	message := crypto.Keccak256(
 		[]byte("\x19Ethereum Signed Message:\n32"),
@@ -64,36 +96,38 @@ func createOrder(rpcClient *rpc.Client, userAddr, pk string) error {
 		S: common.BytesToHash(signatureBytes[32:64]),
 		V: signatureBytes[64] + 27,
 	}
-	order.Signature = sig
 
-	topic := order.BaseToken.Hex() + "::" + order.QuoteToken.Hex()
-	encodedTopic := fmt.Sprintf("0x%s", hex.EncodeToString([]byte(topic)))
+	msg := OrderMsg{
+		AccountNonce:    order.Nonce.Uint64(),
+		Quantity:        order.Quantity,
+		Price:           order.Price,
+		ExchangeAddress: order.ExchangeAddress,
+		UserAddress:     order.UserAddress,
+		BaseToken:       order.BaseToken,
+		QuoteToken:      order.QuoteToken,
+		Status:          order.Status,
+		Side:            order.Side,
+		Type:            order.Type,
+		Hash:            order.Hash,
+		PairName:        order.PairName,
+		V:               big.NewInt(int64(sig.V)),
+		R:               sig.R.Big(),
+		S:               sig.S.Big(),
+	}
 	fmt.Println("nonce: ", order.Nonce.Uint64())
 
 	var result interface{}
-	params := make(map[string]interface{})
-	params["topic"] = encodedTopic
-	err := rpcClient.Call(&result, "tomox_newTopic", params)
-	if err != nil {
-		return fmt.Errorf("rpcClient.Call tomox_newTopic failed %v", err)
-	}
-
+	var err error
 	//create new order
-	params["payload"], err = json.Marshal(order)
-	if err != nil {
-		return fmt.Errorf("json.Marshal failed %v", err)
-	}
 
-	err = rpcClient.Call(&result, "tomox_createOrder", params)
+	err = rpcClient.Call(&result, createOrderApi, msg)
 	if err != nil {
-		return fmt.Errorf("rpcClient.Call tomox_createOrder failed %v", err)
+		return fmt.Errorf("rpcClient.Call %v failed %v", createOrderApi, err)
 	}
 	return nil
 }
 
 func main() {
-	ipaddress := "127.0.0.1"
-	rpcEndpoint := fmt.Sprintf("http://%s:1545", ipaddress)
 	rpcClient, err := rpc.DialHTTP(rpcEndpoint)
 	defer rpcClient.Close()
 	if err != nil {
@@ -105,12 +139,12 @@ func main() {
 			fmt.Println(err)
 			os.Exit(1)
 		}
-		time.Sleep(10 * time.Second)
+		time.Sleep(2 * time.Second)
 	}
 }
 
 func getPrice(base, quote string) (float32, error) {
-	resp, err := http.Get("https://api.coingecko.com/api/v3/simple/price?ids=" + base + "&vs_currencies=" + quote)
+	resp, err := http.Get(coingeckoApi + base + "&vs_currencies=" + quote)
 	if err != nil {
 		return float32(0), fmt.Errorf(err.Error())
 	}
@@ -125,10 +159,30 @@ func getPrice(base, quote string) (float32, error) {
 func getOrderNonce(rpcClient *rpc.Client, addr common.Address) *big.Int {
 	nonce := int64(0)
 	result := ""
-	if err := rpcClient.Call(&result, "tomox_getOrderNonce", addr); err != nil {
+	if err := rpcClient.Call(&result, getOrderNonceApi, addr); err != nil {
 		fmt.Printf("Can't get orderNonce from rpc %v", err)
 	}
 	nonce, _ = strconv.ParseInt(strings.TrimLeft(result, "0x"), 16, 64)
 	return big.NewInt(nonce)
 }
 
+func computeHash(o *tomox.OrderItem) common.Hash {
+	sha := sha3.NewKeccak256()
+	sha.Write(o.ExchangeAddress.Bytes())
+	sha.Write(o.UserAddress.Bytes())
+	sha.Write(o.BaseToken.Bytes())
+	sha.Write(o.QuoteToken.Bytes())
+	sha.Write(common.BigToHash(o.Quantity).Bytes())
+	if o.Price != nil {
+		sha.Write(common.BigToHash(o.Price).Bytes())
+	}
+	if o.Side == tomox.Bid {
+		sha.Write(common.BigToHash(big.NewInt(0)).Bytes())
+	} else {
+		sha.Write(common.BigToHash(big.NewInt(1)).Bytes())
+	}
+	sha.Write([]byte(o.Status))
+	sha.Write([]byte(o.Type))
+	sha.Write(common.BigToHash(o.Nonce).Bytes())
+	return common.BytesToHash(sha.Sum(nil))
+}
