@@ -322,12 +322,7 @@ func ApplyTomoXMatchedTransaction(config *params.ChainConfig, bc *BlockChain, st
 		if tomoXService == nil {
 			return nil, 0, tomox.ErrTomoXServiceNotFound, false
 		}
-		defer func() {
-			// SDK nodes need to keep resultTrade to update mongodb, will remove cache after that
-			if !tomoXService.IsSDKNode() {
-				bc.resultTrades.Remove(tx.Hash())
-			}
-		}()
+
 		matchingFee := big.NewInt(0)
 		baseFee := common.TomoXBaseFee
 		for i := 0; i < len(trades); i++ {
@@ -434,6 +429,11 @@ func ApplyTomoXMatchedTransaction(config *params.ChainConfig, bc *BlockChain, st
 		}
 		masternodeOwner := statedb.GetOwner(header.Coinbase)
 		statedb.AddBalance(masternodeOwner, matchingFee)
+
+		// SDK nodes need to keep resultTrade to update mongodb, will remove cache after that
+		if !tomoXService.IsSDKNode() {
+			bc.resultTrades.Remove(tx.Hash())
+		}
 	} else {
 		log.Debug("No trade found", "txhash", tx.Hash())
 	}
@@ -451,10 +451,10 @@ func ApplyTomoXMatchedTransaction(config *params.ChainConfig, bc *BlockChain, st
 	receipt.GasUsed = 0
 	// if the transaction created a contract, store the creation address in the receipt.
 	// Set the receipt logs and create a bloom for filtering
-	log := &types.Log{}
-	log.Address = *tx.To()
-	log.BlockNumber = header.Number.Uint64()
-	statedb.AddLog(log)
+	stateLog := &types.Log{}
+	stateLog.Address = *tx.To()
+	stateLog.BlockNumber = header.Number.Uint64()
+	statedb.AddLog(stateLog)
 	receipt.Logs = statedb.GetLogs(tx.Hash())
 	receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
 	return receipt, 0, nil, false
