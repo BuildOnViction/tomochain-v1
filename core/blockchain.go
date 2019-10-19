@@ -158,6 +158,7 @@ type BlockChain struct {
 	// Blocks hash array by block number
 	// cache field for tracking finality purpose, can't use for tracking block vs block relationship
 	blocksHashCache *lru.Cache
+	resultTrades    *lru.Cache // Cache for tomox trades
 }
 
 // NewBlockChain returns a fully initialised block chain using information
@@ -179,6 +180,8 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	resultProcess, _ := lru.New(blockCacheLimit)
 	preparingBlock, _ := lru.New(blockCacheLimit)
 	downloadingBlock, _ := lru.New(blockCacheLimit)
+	resultTrades, _ := lru.New(blockCacheLimit)
+
 	bc := &BlockChain{
 		chainConfig:      chainConfig,
 		cacheConfig:      cacheConfig,
@@ -197,6 +200,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		vmConfig:         vmConfig,
 		badBlocks:        badBlocks,
 		blocksHashCache:  blocksHashCache,
+		resultTrades:     resultTrades,
 	}
 	bc.SetValidator(NewBlockValidator(chainConfig, bc, engine))
 	bc.SetProcessor(NewStateProcessor(chainConfig, bc, engine))
@@ -2223,6 +2227,11 @@ func (bc *BlockChain) UpdateM1() error {
 	return nil
 }
 
+func (bc *BlockChain) AddResultTrade(txhash common.Hash, trades []map[string]string) {
+	bc.resultTrades.Add(txhash, trades)
+}
+
+// update orders, trades to mongodb for SDK
 func (bc *BlockChain) logExchangeData(block *types.Block) {
 	var tomoXService *tomox.TomoX
 	engine, ok := bc.Engine().(*posv.Posv)
@@ -2245,8 +2254,16 @@ func (bc *BlockChain) logExchangeData(block *types.Block) {
 	}
 	for _, txMatchBatch := range txMatchBatchData {
 		for _, txMatch := range txMatchBatch.Data {
+			resultTrades, ok := bc.resultTrades.Get(txMatchBatch.TxHash)
+			if !ok {
+				log.Error("no trades found to update mongodb")
+				return
+			}
+			trades := resultTrades.([]map[string]string)
+			// remove from cache
+			bc.resultTrades.Remove(txMatchBatch.TxHash)
 			txMatchTime := time.Unix(0, txMatchBatch.Timestamp)
-			if err := tomoXService.SyncDataToSDKNode(txMatch, txMatchBatch.TxHash, txMatchTime, currentState); err != nil {
+			if err := tomoXService.SyncDataToSDKNode(txMatch, trades, txMatchBatch.TxHash, txMatchTime, currentState); err != nil {
 				log.Error("failed to SyncDataToSDKNode current state", "err", err)
 				return
 			}

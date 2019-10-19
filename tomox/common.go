@@ -15,14 +15,15 @@ type DecodeBytes func([]byte, interface{}) error
 type FormatBytes func([]byte) string
 
 const (
-	TrueByte  = byte(1)
-	FalseByte = byte(0)
-	decimals  = 18
-	Ask    = "SELL"
-	Bid    = "BUY"
-	Market = "MO"
-	Limit  = "LO"
-	Cancel = "CANCELLED"
+	TrueByte        = byte(1)
+	FalseByte       = byte(0)
+	decimals        = 18
+	Ask             = "SELL"
+	Bid             = "BUY"
+	Market          = "MO"
+	Limit           = "LO"
+	Cancel          = "CANCELLED"
+	CommitNewWorkTx = "COMMIT_NEW_WORK_TX"
 )
 
 var (
@@ -268,8 +269,4 @@ func (tx TxDataMatch) DecodeOrder() (*tomox_state.OrderItem, error) {
 		return order, err
 	}
 	return order, nil
-}
-
-func (tx TxDataMatch) GetTrades() []map[string]string {
-	return tx.Trades
 }

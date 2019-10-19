@@ -19,10 +19,13 @@ const (
 	TradeTimestamp      = "timestamp"
 	TradeQuantity       = "quantity"
 	TradeMakerExchange  = "makerExAddr"
-	TradeMaker          = "uAddr"
+	TradeTakerExchange  = "takerExAddr"
+	TradeMaker          = "makerUAddr"
+	TradeTaker          = "takerUAddr"
 	TradeBaseToken      = "bToken"
 	TradeQuoteToken     = "qToken"
 	TradePrice          = "tradedPrice"
+	TradeTakerSide      = "takerSide"
 )
 
 type Trade struct {

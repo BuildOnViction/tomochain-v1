@@ -613,6 +613,7 @@ func (self *worker) commitNewWork() {
 		specialTxs          types.Transactions
 		matchingTransaction *types.Transaction
 		txMatches           []tomox.TxDataMatch
+		trades              []map[string]string
 	)
 	feeCapacity := state.GetTRC21FeeCapacityFromStateWithCache(parent.Root(), work.state)
 	if self.config.Posv != nil && header.Number.Uint64()%self.config.Posv.Epoch != 0 {
@@ -621,7 +622,7 @@ func (self *worker) commitNewWork() {
 			log.Debug("Start processing order pending")
 			orderPending, _ := self.eth.OrderPool().Pending()
 			log.Debug("Start processing order pending", "len", len(orderPending))
-			txMatches = tomoX.ProcessOrderPending(orderPending, work.state, work.tomoxState)
+			txMatches, trades = tomoX.ProcessOrderPending(orderPending, work.state, work.tomoxState)
 			log.Debug("transaction matches found", "txMatches", len(txMatches))
 		}
 	}
@@ -629,7 +630,7 @@ func (self *worker) commitNewWork() {
 	txMatchBatch := &tomox.TxMatchBatch{
 		Data:      txMatches,
 		Timestamp: time.Now().UnixNano(),
-		TxHash:    common.Hash{},
+		TxHash:    common.StringToHash(tomox.CommitNewWorkTx),
 	}
 	wallet, err := self.eth.AccountManager().Find(accounts.Account{Address: self.coinbase})
 	if err != nil {
@@ -649,6 +650,7 @@ func (self *worker) commitNewWork() {
 		return
 	} else {
 		matchingTransaction = txM
+		self.chain.AddResultTrade(matchingTransaction.Hash(), trades)
 	}
 	tx = types.NewTransaction(nonce, common.HexToAddress(common.TomoXStateAddr), big.NewInt(0), txMatchGasLimit, big.NewInt(0), TomoxStateRoot.Bytes())
 	txStateRoot, err := wallet.SignTx(accounts.Account{Address: self.coinbase}, tx, self.config.ChainId)

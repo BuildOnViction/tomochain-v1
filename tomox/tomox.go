@@ -157,8 +157,10 @@ func (tomox *TomoX) Version() uint64 {
 	return ProtocolVersion
 }
 
-func (tomox *TomoX) ProcessOrderPending(pending map[common.Address]types.OrderTransactions, statedb *state.StateDB, tomoXstatedb *tomox_state.TomoXStateDB) []TxDataMatch {
-	txMatches := []TxDataMatch{}
+func (tomox *TomoX) ProcessOrderPending(pending map[common.Address]types.OrderTransactions, statedb *state.StateDB, tomoXstatedb *tomox_state.TomoXStateDB) (txMatches []TxDataMatch, trades []map[string]string) {
+	txMatches = []TxDataMatch{}
+	trades = []map[string]string{}
+
 	txs := types.NewOrderTransactionByNonce(types.OrderTxSigner{}, pending)
 	for {
 		tx := txs.Peek()
@@ -208,7 +210,7 @@ func (tomox *TomoX) ProcessOrderPending(pending map[common.Address]types.OrderTr
 		if cancel {
 			order.Status = OrderStatusCancelled
 		}
-		trades, _, err := ProcessOrder(statedb, tomoXstatedb, common.StringToHash(order.PairName), order)
+		newTrades, _, err := ProcessOrder(statedb, tomoXstatedb, common.StringToHash(order.PairName), order)
 
 		switch err {
 		case ErrNonceTooLow:
@@ -244,12 +246,12 @@ func (tomox *TomoX) ProcessOrderPending(pending map[common.Address]types.OrderTr
 		}
 		txMatch := TxDataMatch{
 			Order:  originalOrderValue,
-			Trades: trades,
 		}
 		txMatches = append(txMatches, txMatch)
+		trades = append(trades, newTrades...)
 
 	}
-	return txMatches
+	return txMatches, trades
 }
 
 // there are 3 tasks need to complete to update data in SDK nodes after matching
@@ -257,7 +259,7 @@ func (tomox *TomoX) ProcessOrderPending(pending map[common.Address]types.OrderTr
 // 2. txMatchData.Trades: includes information of matched orders.
 // 		a. PutObject them to `trades` collection
 // 		b. Update status of regrading orders to sdktypes.OrderStatusFilled
-func (tomox *TomoX) SyncDataToSDKNode(txDataMatch TxDataMatch, txHash common.Hash, txMatchTime time.Time, statedb *state.StateDB) error {
+func (tomox *TomoX) SyncDataToSDKNode(txDataMatch TxDataMatch, trades []map[string]string, txHash common.Hash, txMatchTime time.Time, statedb *state.StateDB) error {
 	var (
 		order *tomox_state.OrderItem
 		err   error
@@ -286,7 +288,6 @@ func (tomox *TomoX) SyncDataToSDKNode(txDataMatch TxDataMatch, txHash common.Has
 		return nil
 	}
 	// 2. put trades to db and update status to FILLED
-	trades := txDataMatch.GetTrades()
 	log.Debug("Got trades", "number", len(trades), "trades", trades)
 	for _, trade := range trades {
 		// 2.a. put to trades

@@ -105,9 +105,10 @@ func (v *BlockValidator) ValidateState(block, parent *types.Block, statedb *stat
 	return nil
 }
 
-func (v *BlockValidator) ValidateMatchingOrder(tomoXService *tomox.TomoX, statedb *state.StateDB, tomoxStatedb *tomox_state.TomoXStateDB, txMatchBatch tomox.TxMatchBatch, blockHash common.Hash) error {
+func (v *BlockValidator) ValidateMatchingOrder(tomoXService *tomox.TomoX, statedb *state.StateDB, tomoxStatedb *tomox_state.TomoXStateDB, txMatchBatch tomox.TxMatchBatch, blockHashNovalidator common.Hash) error {
 	log.Debug("verify matching transaction found a TxMatches Batch", "numTxMatches", len(txMatchBatch.Data))
 
+	var trades []map[string]string
 	for _, txMatch := range txMatchBatch.Data {
 		// verify orderItem
 		order, err := txMatch.DecodeOrder()
@@ -118,10 +119,13 @@ func (v *BlockValidator) ValidateMatchingOrder(tomoXService *tomox.TomoX, stated
 		log.Debug("process tx match", "order", order)
 
 		// process Matching Engine
-		if _, _, err := tomox.ProcessOrder(statedb, tomoxStatedb, common.StringToHash(order.PairName), order); err != nil {
+		trade, _, err := tomox.ProcessOrder(statedb, tomoxStatedb, common.StringToHash(order.PairName), order)
+		if err != nil {
 			return err
 		}
+		trades = append(trades, trade...)
 	}
+	v.bc.resultTrades.Add(txMatchBatch.TxHash, trades)
 
 	return nil
 }

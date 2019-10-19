@@ -189,21 +189,24 @@ func processOrderList(statedb *state.StateDB, tomoXstatedb *tomox_state.TomoXSta
 		log.Debug("Update quantity for orderId", "orderId", orderId.Hex())
 		log.Debug("TRADE", "orderBook", orderBook, "Price 1", price, "Price 2", order.Price, "Amount", tradedQuantity, "orderId", orderId, "side", side)
 
-		transactionRecord := make(map[string]string)
-		transactionRecord[TradeTakerOrderHash] = hex.EncodeToString(order.Hash.Bytes())
-		transactionRecord[TradeMakerOrderHash] = hex.EncodeToString(oldestOrder.Hash.Bytes())
-		transactionRecord[TradeTimestamp] = strconv.FormatInt(time.Now().Unix(), 10)
-		transactionRecord[TradeQuantity] = tradedQuantity.String()
-		transactionRecord[TradeMakerExchange] = oldestOrder.ExchangeAddress.String()
-		transactionRecord[TradeMaker] = oldestOrder.UserAddress.String()
-		transactionRecord[TradeBaseToken] = oldestOrder.BaseToken.String()
-		transactionRecord[TradeQuoteToken] = oldestOrder.QuoteToken.String()
+		tradeRecord := make(map[string]string)
+		tradeRecord[TradeTakerOrderHash] = hex.EncodeToString(order.Hash.Bytes())
+		tradeRecord[TradeMakerOrderHash] = hex.EncodeToString(oldestOrder.Hash.Bytes())
+		tradeRecord[TradeTimestamp] = strconv.FormatInt(time.Now().Unix(), 10)
+		tradeRecord[TradeQuantity] = tradedQuantity.String()
+		tradeRecord[TradeMakerExchange] = oldestOrder.ExchangeAddress.String()
+		tradeRecord[TradeTakerExchange] = order.ExchangeAddress.String()
+		tradeRecord[TradeMaker] = oldestOrder.UserAddress.String()
+		tradeRecord[TradeTaker] = order.UserAddress.String()
+		tradeRecord[TradeBaseToken] = oldestOrder.BaseToken.String()
+		tradeRecord[TradeQuoteToken] = oldestOrder.QuoteToken.String()
 		// maker price is actual price
 		// taker price is offer price
 		// tradedPrice is always actual price
-		transactionRecord[TradePrice] = oldestOrder.Price.String()
+		tradeRecord[TradePrice] = oldestOrder.Price.String()
+		tradeRecord[TradeTakerSide] = oldestOrder.Side
 
-		trades = append(trades, transactionRecord)
+		trades = append(trades, tradeRecord)
 		orderId, amount, err = tomoXstatedb.GetBestOrderIdAndAmount(orderBook, price, side)
 		if err != nil {
 			return nil, nil, nil, err
