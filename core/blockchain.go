@@ -2255,11 +2255,14 @@ func (bc *BlockChain) logExchangeData(block *types.Block) {
 	for _, txMatchBatch := range txMatchBatchData {
 		for _, txMatch := range txMatchBatch.Data {
 			resultTrades, ok := bc.resultTrades.Get(txMatchBatch.TxHash)
-			if !ok {
-				log.Error("no trades found to update mongodb")
-				return
+			var trades []map[string]string
+			if !ok || resultTrades == nil {
+				log.Debug("no trades found to update mongodb. Update order only", "txhash", txMatchBatch.TxHash)
+				trades = []map[string]string{}
+			} else {
+				trades = resultTrades.([]map[string]string)
 			}
-			trades := resultTrades.([]map[string]string)
+
 			// remove from cache
 			bc.resultTrades.Remove(txMatchBatch.TxHash)
 			txMatchTime := time.Unix(0, txMatchBatch.Timestamp)
