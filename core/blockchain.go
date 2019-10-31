@@ -535,9 +535,13 @@ func (bc *BlockChain) repair(head **types.Block) error {
 				if bc.Config().IsTIPTomoX((*head).Number()) && tomoXService != nil {
 					tomoxRoot, err := tomoXService.GetTomoxStateRoot(*head)
 					if err == nil {
-						_, err = tomox_state.New(tomoxRoot, tomoXService.StateCache)
-						if err == nil {
+						if common.EmptyHash(tomoxRoot) {
 							return nil
+						} else {
+							_, err = tomox_state.New(tomoxRoot, tomoXService.StateCache)
+							if err == nil {
+								return nil
+							}
 						}
 					}
 				}
