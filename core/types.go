@@ -17,12 +17,12 @@
 package core
 
 import (
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/state"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/tomox"
-	"github.com/ethereum/go-ethereum/tomox/tomox_state"
+	"github.com/tomochain/go-tomochain/common"
+	"github.com/tomochain/go-tomochain/core/state"
+	"github.com/tomochain/go-tomochain/core/types"
+	"github.com/tomochain/go-tomochain/core/vm"
+	"github.com/tomochain/go-tomochain/tomox"
+	"github.com/tomochain/go-tomochain/tomox/tomox_state"
 	"math/big"
 )
 

@@ -3,11 +3,11 @@ package tomox
 import (
 	"encoding/json"
 	"errors"
-	"github.com/ethereum/go-ethereum/tomox/tomox_state"
+	"github.com/tomochain/go-tomochain/tomox/tomox_state"
 	"math/big"
 	"strconv"
 
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/tomochain/go-tomochain/common"
 )
 
 type Comparator func(a, b []byte) int

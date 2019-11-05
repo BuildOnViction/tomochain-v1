@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"fmt"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/state"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/tomox/tomox_state"
+	"github.com/tomochain/go-tomochain/common"
+	"github.com/tomochain/go-tomochain/core/state"
+	"github.com/tomochain/go-tomochain/log"
+	"github.com/tomochain/go-tomochain/tomox/tomox_state"
 )
 
 var emptyAddress = common.StringToAddress("")
