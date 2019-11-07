@@ -2,7 +2,7 @@ package tomox
 
 import (
 	"bytes"
-	"github.com/tomochain/go-tomochain/common"
+	"github.com/tomochain/tomochain/common"
 	"math/big"
 	"os"
 	"testing"

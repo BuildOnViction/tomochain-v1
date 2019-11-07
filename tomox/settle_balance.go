@@ -2,10 +2,10 @@ package tomox
 
 import (
 	"fmt"
-	"github.com/tomochain/go-tomochain/accounts/abi/bind"
-	"github.com/tomochain/go-tomochain/common"
-	trc21 "github.com/tomochain/go-tomochain/contracts/trc21issuer/contract"
-	"github.com/tomochain/go-tomochain/ethclient"
+	"github.com/tomochain/tomochain/accounts/abi/bind"
+	"github.com/tomochain/tomochain/common"
+	trc21 "github.com/tomochain/tomochain/contracts/trc21issuer/contract"
+	"github.com/tomochain/tomochain/ethclient"
 	"math/big"
 )
 
