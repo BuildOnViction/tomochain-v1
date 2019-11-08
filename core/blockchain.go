@@ -2263,11 +2263,7 @@ func (bc *BlockChain) logExchangeData(block *types.Block) {
 	}()
 	for _, txMatchBatch := range txMatchBatchData {
 		for _, txMatch := range txMatchBatch.Data {
-			// the smallest time unit in mongodb is millisecond
-			// hence, we should update time in millisecond
-			// old txData has been attached with nanosecond, to avoid hard fork, convert nanosecond to millisecond here
-			milliSecond := txMatchBatch.Timestamp / 1e6
-			txMatchTime := time.Unix(0, milliSecond * 1e6).UTC()
+			txMatchTime := time.Unix(0, txMatchBatch.Timestamp)
 			if err := tomoXService.SyncDataToSDKNode(txMatch, txMatchBatch.TxHash, txMatchTime, currentState); err != nil {
 				log.Error("failed to SyncDataToSDKNode ", "blockNumber", block.Number(), "err", err)
 				return
